@@ -7,6 +7,7 @@ API: https://apis.data.go.kr/1230000/ad/BidPublicInfoService04
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 
 from lxml import etree
@@ -113,7 +114,7 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         url=url,
         detail_url=url,
         content="",
-        budget=budget or est_price,
+        budget=budget if budget is not None else est_price,
         region=t("dminsttNm"),
         category=category,
         attachments=attachments or None,
@@ -127,7 +128,7 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
                 "contact": f"{t('ntceInsttOfclNm')} {t('ntceInsttOfclTelNo')}".strip(),
                 "bid_qual": t("bidQlftcRgstDt"),
                 "open_date": t("opengDt"),
-            }.items() if v
+            }.items() if v is not None and v != ""
         } or None,
     )
 
@@ -207,7 +208,6 @@ class NaraCollector(BaseCollector):
 
     async def health_check(self) -> dict:
         """API 연결 상태 확인 — 용역 서비스 1건 조회."""
-        import time
         start = time.time()
         try:
             async with create_client(timeout=10.0) as client:

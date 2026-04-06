@@ -6,12 +6,14 @@ Swagger: https://infuser.odcloud.kr/api/stages/44436/api-docs
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from .base import BaseCollector
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
+from .utils.status import determine_status
 from .utils.text import clean_html_to_text
 
 logger = logging.getLogger("bid_collectors")
@@ -84,7 +86,6 @@ class Subsidy24Collector(BaseCollector):
         return notices, pages_processed
 
     async def health_check(self) -> dict:
-        import time
         start = time.time()
         try:
             async with create_client(timeout=10.0) as client:
@@ -133,7 +134,7 @@ def _item_to_notice(item: dict) -> Notice | None:
         organization=item.get("소관기관명", ""),
         start_date=None,
         end_date=end_str or None,
-        status="ongoing",
+        status=determine_status(end_str) if end_str else "ongoing",
         url=url,
         detail_url=detail_url,
         content=content,
@@ -151,7 +152,7 @@ def _item_to_notice(item: dict) -> Notice | None:
                 "reception_agency": item.get("접수기관", ""),
                 "phone": item.get("전화문의", ""),
                 "view_count": item.get("조회수"),
-            }.items() if v
+            }.items() if v is not None and v != ""
         } or None,
     )
 

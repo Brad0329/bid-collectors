@@ -92,16 +92,24 @@ class BaseCollector(ABC):
         return "DATA_GO_KR_KEY"  # 대부분의 공공 API 기본값
 
     @abstractmethod
-    async def collect(self, days: int = 1, **kwargs) -> "CollectResult":
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list["Notice"], int]:
         """
-        공고 수집 메인 메서드.
+        공고 수집 — 서브클래스가 구현.
 
         Args:
             days: 최근 N일간 공고 수집 (기본 1일)
             **kwargs: 수집기별 추가 옵션
 
         Returns:
-            CollectResult (아래 정의)
+            (notices 리스트, 처리한 페이지 수)
+        """
+        ...
+
+    async def collect(self, days: int = 1, **kwargs) -> "CollectResult":
+        """
+        공고 수집 메인 메서드 (템플릿 메서드).
+        _fetch()를 호출하고 중복 제거 + CollectResult 래핑을 자동 처리.
+        서브클래스는 이 메서드를 오버라이드하지 않고 _fetch()만 구현.
         """
         ...
 

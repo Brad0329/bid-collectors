@@ -6,6 +6,7 @@ API: https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from .base import BaseCollector
@@ -30,7 +31,9 @@ class BizinfoCollector(BaseCollector):
         return "BIZINFO_API_KEY"
 
     async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = (datetime.now() - timedelta(days=days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         notices: list[Notice] = []
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
@@ -80,7 +83,6 @@ class BizinfoCollector(BaseCollector):
         return notices, pages_processed
 
     async def health_check(self) -> dict:
-        import time
         start = time.time()
         try:
             async with create_client(timeout=10.0) as client:
@@ -165,7 +167,7 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
                 "reference": item.get("refrncNm", ""),
                 "req_method": item.get("reqstMthPapersCn", ""),
                 "view_count": item.get("inqireCo"),
-            }.items() if v
+            }.items() if v is not None and v != ""
         } or None,
     )
 

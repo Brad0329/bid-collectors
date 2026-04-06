@@ -7,6 +7,8 @@ from .base import BaseCollector
 from .nara import NaraCollector
 from .bizinfo import BizinfoCollector
 from .subsidy24 import Subsidy24Collector
+from .kstartup import KstartupCollector
+from .smes import SmesCollector
 
 __all__ = [
     "Notice",
@@ -15,4 +17,6 @@ __all__ = [
     "NaraCollector",
     "BizinfoCollector",
     "Subsidy24Collector",
+    "KstartupCollector",
+    "SmesCollector",
 ]

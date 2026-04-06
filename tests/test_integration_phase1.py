@@ -1,7 +1,7 @@
 """Phase 1 통합 테스트 — 실제 API 호출.
 
-3개 수집기(나라장터, 기업마당, 보조금24)의 실제 API 연동을 검증한다.
-소량 데이터만 요청하여 API 부하를 최소화한다.
+5개 수집기(나라장터, 기업마당, 보조금24, K-Startup, 중소벤처기업부)의
+실제 API 연동을 검증한다. 소량 데이터만 요청하여 API 부하를 최소화한다.
 """
 
 import pytest
@@ -13,6 +13,8 @@ from bid_collectors import (
     NaraCollector,
     BizinfoCollector,
     Subsidy24Collector,
+    KstartupCollector,
+    SmesCollector,
     CollectResult,
     Notice,
 )
@@ -170,7 +172,101 @@ class TestSubsidy24Integration:
 
 
 # ---------------------------------------------------------------------------
-# 4. Cross-collector 검증
+# 4. KstartupCollector (K-Startup) 통합 테스트
+# ---------------------------------------------------------------------------
+
+class TestKstartupIntegration:
+    """K-Startup 실제 API 통합 테스트."""
+
+    @pytest.fixture(scope="class")
+    def collector(self):
+        return KstartupCollector()
+
+    @pytest.mark.integration
+    async def test_health_check(self, collector):
+        """health_check() -> status 'ok'."""
+        result = await collector.health_check()
+        assert result["status"] == "ok", f"health_check 실패: {result.get('message', '')}"
+        assert result["source"] == "K-Startup"
+        assert "response_time_ms" in result
+
+    @pytest.mark.integration
+    async def test_collect(self, collector):
+        """collect(days=7, max_pages=1) -> CollectResult 반환."""
+        result = await collector.collect(days=7, max_pages=1)
+
+        assert isinstance(result, CollectResult)
+        assert result.source == "K-Startup"
+        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        assert result.collected_at is not None
+        assert result.duration_seconds > 0
+        assert result.pages_processed > 0
+
+    @pytest.mark.integration
+    async def test_notice_fields(self, collector):
+        """반환된 공고의 필드 검증."""
+        result = await collector.collect(days=7, max_pages=1)
+
+        if len(result.notices) == 0:
+            pytest.skip("최근 7일 K-Startup 공고 없음 — 필드 검증 건너뜀")
+
+        for notice in result.notices[:5]:
+            assert isinstance(notice, Notice)
+            assert notice.source == "K-Startup"
+            assert notice.bid_no.startswith("KSTARTUP-"), f"bid_no 형식 오류: {notice.bid_no}"
+            assert notice.title, "title이 비어있음"
+            assert notice.url, "url이 비어있음"
+
+
+# ---------------------------------------------------------------------------
+# 5. SmesCollector (중소벤처기업부) 통합 테스트
+# ---------------------------------------------------------------------------
+
+class TestSmesIntegration:
+    """중소벤처기업부 실제 API 통합 테스트."""
+
+    @pytest.fixture(scope="class")
+    def collector(self):
+        return SmesCollector()
+
+    @pytest.mark.integration
+    async def test_health_check(self, collector):
+        """health_check() -> status 'ok'."""
+        result = await collector.health_check()
+        assert result["status"] == "ok", f"health_check 실패: {result.get('message', '')}"
+        assert result["source"] == "중소벤처기업부"
+        assert "response_time_ms" in result
+
+    @pytest.mark.integration
+    async def test_collect(self, collector):
+        """collect(days=30, max_pages=1) -> CollectResult 반환 (최근 데이터 없을 수 있음)."""
+        result = await collector.collect(days=30, max_pages=1)
+
+        assert isinstance(result, CollectResult)
+        assert result.source == "중소벤처기업부"
+        # API가 최근 기간에 데이터가 없을 수 있으므로 에러만 없으면 OK
+        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        assert result.collected_at is not None
+        assert result.duration_seconds > 0
+
+    @pytest.mark.integration
+    async def test_notice_fields(self, collector):
+        """반환된 공고의 필드 검증."""
+        result = await collector.collect(days=30, max_pages=1)
+
+        if len(result.notices) == 0:
+            pytest.skip("최근 30일 중소벤처기업부 공고 없음 — 필드 검증 건너뜀")
+
+        for notice in result.notices[:5]:
+            assert isinstance(notice, Notice)
+            assert notice.source == "중소벤처기업부"
+            assert notice.bid_no.startswith("MSS-"), f"bid_no 형식 오류: {notice.bid_no}"
+            assert notice.title, "title이 비어있음"
+            assert notice.url, "url이 비어있음"
+
+
+# ---------------------------------------------------------------------------
+# 6. Cross-collector 검증
 # ---------------------------------------------------------------------------
 
 class TestCrossCollector:
@@ -178,11 +274,13 @@ class TestCrossCollector:
 
     @pytest.mark.integration
     async def test_all_importable(self):
-        """3개 수집기 + 모델이 bid_collectors 패키지에서 임포트 가능."""
+        """5개 수집기 + 모델이 bid_collectors 패키지에서 임포트 가능."""
         from bid_collectors import (
             NaraCollector,
             BizinfoCollector,
             Subsidy24Collector,
+            KstartupCollector,
+            SmesCollector,
             CollectResult,
             Notice,
             BaseCollector,
@@ -190,6 +288,8 @@ class TestCrossCollector:
         assert NaraCollector is not None
         assert BizinfoCollector is not None
         assert Subsidy24Collector is not None
+        assert KstartupCollector is not None
+        assert SmesCollector is not None
         assert CollectResult is not None
         assert Notice is not None
         assert BaseCollector is not None

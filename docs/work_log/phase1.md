@@ -2,33 +2,39 @@
 
 > 작성일: 2026-04-06
 > 상태: 완료
-> 테스트: 단위 174개 전체 통과 + 통합(실제 API) 11개 전체 통과
+> 테스트: 단위 237개 전체 통과 + 통합(실제 API) 17개 전체 통과
 
 ---
 
 ## 1. 구현 범위
 
-Phase 0에서 만든 BaseCollector를 상속하여 MVP 수집기 3개를 구현했다:
+Phase 0에서 만든 BaseCollector를 상속하여 수집기 5개를 구현했다:
 
 | 수집기 | 파일 | 출처 | API 형식 | 인증 키 |
 |--------|------|------|----------|---------|
 | 나라장터 | `nara.py` | 공공데이터포털 | XML | `DATA_GO_KR_KEY` |
 | 기업마당 | `bizinfo.py` | bizinfo.go.kr | JSON | `BIZINFO_API_KEY` (별도) |
 | 보조금24 | `subsidy24.py` | 공공데이터포털 (odcloud) | JSON | `DATA_GO_KR_KEY` (별도 활용 신청 필요) |
+| K-Startup | `kstartup.py` | 공공데이터포털 (odcloud) | JSON | `DATA_GO_KR_KEY` |
+| 중소벤처기업부 | `smes.py` | 공공데이터포털 | XML | `DATA_GO_KR_KEY` |
 
 ### 1-1. 디렉토리 변경사항
 
 ```
 bid_collectors/
-├── __init__.py          # NaraCollector, BizinfoCollector, Subsidy24Collector 추가 export
+├── __init__.py          # NaraCollector, BizinfoCollector, Subsidy24Collector, KstartupCollector, SmesCollector 추가 export
 ├── nara.py              # 나라장터 수집기 (신규)
 ├── bizinfo.py           # 기업마당 수집기 (신규)
-└── subsidy24.py         # 보조금24 수집기 (신규)
+├── subsidy24.py         # 보조금24 수집기 (신규)
+├── kstartup.py          # K-Startup 수집기 (신규)
+└── smes.py              # 중소벤처기업부 수집기 (신규)
 
 tests/
 ├── test_nara.py         # 31개 테스트 (신규)
 ├── test_bizinfo.py      # 36개 테스트 (신규)
-└── test_subsidy24.py    # 41개 테스트 (신규)
+├── test_subsidy24.py    # 41개 테스트 (신규)
+├── test_kstartup.py     # 34개 테스트 (신규)
+└── test_smes.py         # 29개 테스트 (신규)
 ```
 
 ### 1-2. 패키지 공개 API 변경 (`__init__.py`)
@@ -37,6 +43,7 @@ tests/
 __all__ = [
     "Notice", "CollectResult", "BaseCollector",
     "NaraCollector", "BizinfoCollector", "Subsidy24Collector",
+    "KstartupCollector", "SmesCollector",
 ]
 ```
 
@@ -301,9 +308,76 @@ while page <= max_pages (기본 50):
 
 ---
 
-## 5. 공통 패턴
+## 5. K-Startup 수집기 (`bid_collectors/kstartup.py`)
 
-### 5-1. 모든 수집기의 _fetch 공통 구조
+### 5-1. API 정보
+
+- **엔드포인트**: `https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01`
+- **응답 형식**: JSON (odcloud 형식 — `data` 배열, `totalCount`)
+- **인증**: `serviceKey` 파라미터 (`DATA_GO_KR_KEY`)
+- **lets_portal 원본**: `collectors/kstartup.py` 기반, 키워드 매칭/display_settings 의존성 제거
+
+### 5-2. 날짜 필터링 (cutoff 기반)
+
+접수시작일(`pbanc_rcpt_bgng_dt`) 기준으로 cutoff 비교. 날짜 단위로 자름 (시각 무시).
+
+### 5-3. Notice 변환
+
+**bid_no 형식**: `KSTARTUP-{pbanc_sn}`
+
+**상태 판정**: `rcrt_prgs_yn` 필드 — `"Y"` → ongoing, 그 외 → closed
+
+**only_ongoing 옵션**: `cond[rcrt_prgs_yn::EQ]=Y` 파라미터를 API 요청에 추가
+
+**extra 필드**:
+| 키 | 설명 |
+|---|---|
+| `target` | 지원대상 |
+| `apply_url` | 신청 URL |
+| `contact` | 연락처 |
+| `apply_method` | 신청방법 |
+| `biz_year` | 사업연도 |
+| `target_age` | 대상 연령 |
+| `department` | 담당부서 |
+| `excl_target` | 제외대상 |
+| `biz_name` | 사업명 |
+
+---
+
+## 6. 중소벤처기업부 수집기 (`bid_collectors/smes.py`)
+
+### 6-1. API 정보
+
+- **엔드포인트**: `http://apis.data.go.kr/1421000/mssBizService_v2/getbizList_v2` (주의: HTTP, HTTPS 아님)
+- **응답 형식**: XML (`lxml.etree` 파싱)
+- **인증**: `serviceKey` 파라미터 (`DATA_GO_KR_KEY`)
+- **lets_portal 원본**: `collectors/mss_biz.py` 기반, 키워드 매칭 제거
+
+### 6-2. 날짜 필터링 (서버 측)
+
+`startDate`/`endDate` 파라미터로 서버 측 필터링.
+
+### 6-3. Notice 변환
+
+**bid_no 형식**: `MSS-{itemId}`
+
+**상태 판정**: `determine_status(end_date)` 사용
+
+**예산 파싱**: `suptScale`에서 정규식으로 숫자 추출
+
+**첨부파일**: `fileName`/`fileUrl` 쌍 복수 추출
+
+**extra 필드**:
+| 키 | 설명 |
+|---|---|
+| `budget_raw` | 원본 예산 문자열 |
+| `writer` | 작성자 |
+
+---
+
+## 7. 공통 패턴
+
+### 7-1. 모든 수집기의 _fetch 공통 구조
 
 1. `create_client(timeout=30.0)` 으로 httpx 클라이언트 생성
 2. 페이지 순회하며 API 호출
@@ -311,7 +385,7 @@ while page <= max_pages (기본 50):
 4. `tuple[list[Notice], int]` 반환 — 두 번째 요소가 pages_processed (kwargs mutate 방식에서 변경됨)
 5. 에러 발생 시 로깅 후 break (부분 수집 허용)
 
-### 5-2. extra 딕셔너리 패턴
+### 7-2. extra 딕셔너리 패턴
 
 모든 수집기에서 동일한 패턴으로 빈 값 제외:
 ```python
@@ -323,7 +397,7 @@ extra = {
 } or None
 ```
 
-### 5-3. health_check 공통 구조
+### 7-3. health_check 공통 구조
 
 ```python
 async def health_check(self) -> dict:
@@ -339,17 +413,19 @@ async def health_check(self) -> dict:
 
 ---
 
-## 6. 테스트 요약
+## 8. 테스트 요약
 
-총 Phase 1 신규: 108개, Phase 0 포함 전체: 단위 테스트 174개 전체 통과.
+총 Phase 1 신규: 171개, Phase 0 포함 전체: 단위 테스트 237개 전체 통과.
 
-### 통합 테스트 (실제 API): 11개 전체 통과
+### 통합 테스트 (실제 API): 17개 전체 통과
 
 | 수집기 | 테스트 수 | 비고 |
 |--------|-----------|------|
 | 나라장터 | 3 | 용역 1일분 383건, 4페이지 처리 |
 | 기업마당 | 3 | |
 | 보조금24 | 3 | |
+| K-Startup | 3 | |
+| 중소벤처기업부 | 3 | |
 | 크로스체크 | 2 | |
 
 ### 단위 테스트 상세
@@ -359,6 +435,8 @@ async def health_check(self) -> dict:
 | `test_nara.py` | 31 | _split_date_range 6개 + _parse_xml_items 4개 + _item_to_notice 10개 + 초기화 3개 + _fetch 5개 + health_check 3개 |
 | `test_bizinfo.py` | 36 | _is_within_cutoff 5개 + _parse_attachments 5개 + _item_to_notice 11개 + 초기화 5개 + _fetch 6개 + health_check 4개 |
 | `test_subsidy24.py` | 41 | _item_to_notice 17개 + _is_business_target 7개 + 초기화 4개 + _fetch 9개 + health_check 4개 |
+| `test_kstartup.py` | 34 | K-Startup 수집기 단위 테스트 |
+| `test_smes.py` | 29 | 중소벤처기업부 수집기 단위 테스트 |
 
 **테스트 주요 검증 사항:**
 
@@ -387,7 +465,7 @@ async def health_check(self) -> dict:
 
 ---
 
-## 7. 주요 실수 및 교훈
+## 9. 주요 실수 및 교훈
 
 ### 실수
 
@@ -409,12 +487,13 @@ async def health_check(self) -> dict:
 
 ---
 
-## 8. 향후 주의점
+## 10. 향후 주의점
 
-1. **API 키 관리**: 3가지 키가 필요함
-   - `DATA_GO_KR_KEY`: 나라장터, 보조금24 공통
+1. **API 키 관리**: 2가지 키가 필요함
+   - `DATA_GO_KR_KEY`: 나라장터, 보조금24, K-Startup, 중소벤처기업부 공통
    - `BIZINFO_API_KEY`: 기업마당 전용
    - 보조금24는 DATA_GO_KR_KEY이지만 서비스 15113968 별도 활용 신청 필수
+   - 중소벤처기업부 API는 HTTP(HTTPS 아님)를 사용하므로 주의
 
 2. **나라장터 429 대응**: 나라장터 API는 요청 속도 제한이 있어 429 에러가 빈번함. 30초 대기 + 3회 재시도로 처리하지만, 대량 수집 시 충분한 시간 확보 필요.
 
@@ -438,18 +517,18 @@ async def health_check(self) -> dict:
 
 ---
 
-## 9. Phase 1 완료 기준 체크리스트
+## 11. Phase 1 완료 기준 체크리스트
 
-- [x] 3개 수집기 각각 collect(days=1) 호출 시 Notice 리스트 반환
+- [x] 5개 수집기 각각 collect(days=1) 호출 시 Notice 리스트 반환
 - [x] health_check()로 API 연결 확인 가능
-- [x] 단위 테스트 통과율 100% (174개)
-- [x] 통합 테스트 (실제 API) 통과 (11개)
+- [x] 단위 테스트 통과율 100% (237개)
+- [x] 통합 테스트 (실제 API) 통과 (17개)
 - [x] pip install -e . 로 로컬 설치 후 import 가능
 - [x] BidWatch 본체에서 from bid_collectors import NaraCollector 동작 확인
 
 ---
 
-## 10. Phase 2 작업 예고
+## 12. Phase 2 작업 예고
 
 Phase 2에서는 공기업/공공기관 수집기를 추가 구현한다:
 

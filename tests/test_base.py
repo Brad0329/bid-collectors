@@ -15,8 +15,8 @@ class ConcreteCollector(BaseCollector):
         super().__init__(api_key=api_key, **kwargs)
         self._notices: list[Notice] = []
 
-    async def _fetch(self, days=1, **kwargs) -> list[Notice]:
-        return self._notices
+    async def _fetch(self, days=1, **kwargs) -> tuple[list[Notice], int]:
+        return self._notices, 1
 
 
 def _make_notice(bid_no="BID-001", source="test_source"):

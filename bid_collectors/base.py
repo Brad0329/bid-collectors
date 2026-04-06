@@ -27,8 +27,12 @@ class BaseCollector(ABC):
         return "DATA_GO_KR_KEY"
 
     @abstractmethod
-    async def _fetch(self, days: int = 1, **kwargs) -> list[Notice]:
-        """공고 수집 — 서브클래스가 구현."""
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
+        """공고 수집 — 서브클래스가 구현.
+
+        Returns:
+            (notices 리스트, 처리한 페이지 수)
+        """
         ...
 
     async def collect(self, days: int = 1, **kwargs) -> CollectResult:
@@ -36,10 +40,11 @@ class BaseCollector(ABC):
         start = time.time()
         errors: list[str] = []
         notices: list[Notice] = []
+        pages_processed = 0
         is_partial = False
 
         try:
-            notices = await self._fetch(days=days, **kwargs)
+            notices, pages_processed = await self._fetch(days=days, **kwargs)
         except Exception as e:
             logger.error(f"[{self.source_name}] 수집 실패: {e}")
             errors.append(str(e))
@@ -63,7 +68,7 @@ class BaseCollector(ABC):
             duration_seconds=round(duration, 2),
             total_fetched=len(notices),
             total_after_dedup=len(deduped),
-            pages_processed=kwargs.get("_pages_processed", 0),
+            pages_processed=pages_processed,
             errors=errors,
             is_partial=is_partial,
         )

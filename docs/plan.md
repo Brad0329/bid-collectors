@@ -96,7 +96,7 @@ lets_portal에서 가져와 통합:
 
 ---
 
-## Phase 1: MVP 수집기 3개 (1~2주)
+## Phase 1: MVP 수집기 5개 (1~2주)
 
 ### 1-1. 나라장터 (`nara.py`)
 
@@ -149,14 +149,50 @@ lets_portal에서 가져와 통합:
 
 **테스트:** 실제 API + Mock 단위
 
-### 1-4. Phase 1 완료 기준
+### 1-4. K-Startup (`kstartup.py`)
 
-- [ ] 3개 수집기 각각 `collect(days=1)` 호출 시 Notice 리스트 반환
-- [ ] `health_check()` 로 API 연결 확인 가능
-- [ ] 단위 테스트 통과율 100%
-- [ ] 통합 테스트 (실제 API) 통과
-- [ ] `pip install -e .` 로 로컬 설치 후 import 가능
-- [ ] BidWatch 본체에서 `from bid_collectors import NaraCollector` 동작 확인
+**이식 원본:** lets_portal `collectors/kstartup.py` (dev_reference.md §4)
+
+**변경 사항:**
+- 키워드 매칭 제거 → 전체 수집
+- 동기(requests) → 비동기(httpx)
+- display_settings 테이블 의존성 제거
+- only_ongoing 파라미터 유지 (`cond[rcrt_prgs_yn::EQ]=Y`)
+
+**구현:**
+1. odcloud 형식 JSON 응답 파싱 (data 배열, totalCount)
+2. 접수시작일(pbanc_rcpt_bgng_dt) 기준 cutoff 필터링
+3. Notice 모델 매핑 (bid_no = `KSTARTUP-{pbanc_sn}`)
+4. extra 필드: target, apply_url, contact, apply_method, biz_year, target_age, department
+
+**테스트:** 실제 API + Mock 단위
+
+### 1-5. 중소벤처기업부 (`smes.py`)
+
+**이식 원본:** lets_portal `collectors/mss_biz.py`
+
+**변경 사항:**
+- 키워드 매칭 제거 → 전체 수집
+- 동기(requests) → 비동기(httpx)
+- XML 파싱: `lxml.etree` 사용 (원본은 `xml.etree.ElementTree`)
+
+**구현:**
+1. XML 응답 파싱 (API URL은 HTTP, HTTPS 아님)
+2. startDate/endDate 파라미터로 서버 측 날짜 필터링
+3. Notice 모델 매핑 (bid_no = `MSS-{itemId}`)
+4. 예산 파싱: suptScale에서 정규식으로 숫자 추출
+5. 첨부파일: fileName/fileUrl 쌍 복수 추출
+
+**테스트:** 실제 API + Mock 단위
+
+### 1-6. Phase 1 완료 기준
+
+- [x] 5개 수집기 각각 `collect(days=1)` 호출 시 Notice 리스트 반환
+- [x] `health_check()` 로 API 연결 확인 가능
+- [x] 단위 테스트 통과율 100% (237개)
+- [x] 통합 테스트 (실제 API) 통과 (17개)
+- [x] `pip install -e .` 로 로컬 설치 후 import 가능
+- [x] BidWatch 본체에서 `from bid_collectors import NaraCollector` 동작 확인
 
 ---
 

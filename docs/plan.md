@@ -237,7 +237,7 @@ lets_portal에서 가져와 통합:
 
 ### 2-6. Phase 2 완료 기준
 
-- [ ] 5개 수집기 추가, 총 8개 동작
+- [ ] 5개 수집기 추가, 총 10개 동작
 - [ ] 각 수집기 통합 테스트 통과
 - [ ] 수집기별 API 응답 차이 (XML/JSON, 필드명) 정리 문서화
 
@@ -245,28 +245,21 @@ lets_portal에서 가져와 통합:
 
 ## Phase 3: 부가 수집기 + 스크래퍼 엔진 (2~3주)
 
-### 3-1. K-Startup (`kstartup.py`)
+> **참고:** K-Startup, 중소벤처기업부는 원래 Phase 3 예정이었으나 Phase 1에서 앞당겨 완료.
 
-**이식 원본:** lets_portal `collectors/kstartup.py` (dev_reference.md §4)
-
-**변경 사항:**
-- 동기 → 비동기
-- display_settings 의존성 제거
-- only_ongoing 파라미터 유지
-- clean_html로 content 정리
-
-### 3-2. 중소벤처24 (`smes24.py`)
+### 3-1. 중소벤처24 (`smes24.py`)
 
 **API:** data.go.kr 공고정보 (15113191)
+- 중소벤처기업부(smes.py)와 별개 서비스 — 중소벤처24 포털의 공고 데이터
 
-### 3-3. 나라장터 확장 (`nara.py` 추가 메서드)
+### 3-2. 나라장터 확장 (`nara.py` 추가 메서드)
 
 기존 nara.py에 메서드 추가:
 - `collect_awards()` — 낙찰정보
 - `collect_contracts()` — 계약정보
 - `collect_pre_specs()` — 사전규격
 
-### 3-4. generic_scraper 엔진 (`generic_scraper.py`)
+### 3-3. generic_scraper 엔진 (`generic_scraper.py`)
 
 **이식 원본:** lets_portal `collectors/generic_scraper.py` (dev_reference.md §5)
 
@@ -281,9 +274,9 @@ lets_portal에서 가져와 통합:
 
 **config 스키마:** dev_reference.md §6 참조 — 그대로 유지 (AI가 이 포맷으로 생성)
 
-### 3-5. Phase 3 완료 기준
+### 3-4. Phase 3 완료 기준
 
-- [ ] 총 10+ 수집기 동작
+- [ ] 총 12+ 수집기 동작
 - [ ] generic_scraper로 lets_portal 48개 사이트 config 중 샘플 5개 테스트 통과
 - [ ] 패키지 v1.0 릴리스 (pyproject.toml 버전)
 - [ ] README.md 사용 가이드 완성

@@ -320,7 +320,50 @@ lets_portal 원본은 `verify=False`를 사용했으나, 보안을 위해 기본
 
 ---
 
-## 10. Phase 3 작업 예고
+## 10. 중소벤처24 (smes24.py) — 스킵
+
+API 15113191은 **LINK 타입 API**로 표준 REST API가 아님. `smes.go.kr` 자체 API를 사용하며 별도 인증키가 필요 (중소벤처24 운영팀 044-300-0990 신청). 기존 `smes.py` (API 15113297)가 동일 데이터소스를 커버하므로 스킵.
+
+---
+
+## 11. 나라장터 확장 메서드 (nara.py)
+
+### 11-1. API 엔드포인트
+
+| 서비스 | Base URL | Key 파라미터 | 용역 | 물품 | 공사 |
+|--------|----------|-------------|------|------|------|
+| 낙찰 | `/1230000/as/ScsbidInfoService` | `serviceKey` (소문자) | `getScsbidListSttusServcPPSSrch` | `...ThngPPSSrch` | `...CnstwkPPSSrch` |
+| 계약 | `/1230000/ao/CntrctInfoService` | `serviceKey` (소문자) | `getCntrctInfoListServc` | `...Thng` | `...Cnstwk` |
+| 사전규격 | `/1230000/ao/HrcspSsstndrdInfoService` | `ServiceKey` (**대문자 S**) | `getPublicPrcureThngInfoServc` | `...Thng` | `...Cnstwk` |
+
+### 11-2. Notice 매핑
+
+- **낙찰**: `bid_no=낙찰-{type}-{bidNtceNo}-{bidNtceOrd}`, extra에 낙찰자 정보 (bidwinnrNm, sucsfbidAmt, sucsfbidRate, prtcptCnum)
+- **계약**: `bid_no=계약-{type}-{dcsnCntrctNo}`, 계약금액(thtmCntrctAmt), 계약기간(cntrctPrd), 계약방식(cntrctCnclsMthdNm)
+- **사전규격**: `bid_no=사전규격-{type}-{bfSpecRgstNo}`, 규격서 첨부파일(specDocFileUrl1~5), 의견마감일(opninRgstClseDt)
+
+### 11-3. 실제 API 검증
+
+- 낙찰 (용역 1일분): 15건
+- 계약 (용역 1일분): 6,718건
+- 사전규격 (물품 1일분): 322건
+
+### 11-4. 주요 실수 및 교훈
+
+1. **API 경로 prefix 불일치**: 입찰공고는 `/ad/`, 낙찰은 `/as/`, 계약/사전규격은 `/ao/`. 서비스별로 다른 prefix 사용.
+2. **사전규격 ServiceKey 대문자**: 다른 모든 서비스는 `serviceKey`(소문자 s), 사전규격만 `ServiceKey`(대문자 S). API 참고자료 docx에서 발견.
+3. **활용 신청 필요**: 낙찰(15129397)/계약(15129427)/사전규격(15129437)은 입찰공고와 별도로 data.go.kr에서 활용 신청 필요. 미신청 시 500 반환.
+4. **계약 operation명**: PPSSrch 접미사 있는 버전은 추가 필수 파라미터 필요 → 기본 operation 사용.
+
+### 11-5. 향후 주의점
+
+1. 사전규격은 `ServiceKey` (대문자 S) 필수
+2. 계약정보는 1일분만으로도 ~6700건 → `max_pages` 조절 필요
+3. `_fetch_extended()`가 공통 수집 루프 — 기존 `_fetch()`와 분리하여 입찰공고에 영향 없음
+
+---
+
+## 12. Phase 3 작업 예고
 
 Phase 3에서는 GenericScraper 엔진을 활용하여 lets_portal 39개 사이트의 config를 작성하고, JSON API 모드를 추가한다:
 

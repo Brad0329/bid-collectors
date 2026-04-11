@@ -1,7 +1,9 @@
-"""나라장터 입찰공고 수집기.
+"""나라장터 입찰공고 수집기 + 확장 (낙찰/계약/사전규격).
 
-API: https://apis.data.go.kr/1230000/ad/BidPublicInfoService04
-서비스 3개: 용역(ServcPPSSrch), 물품(ThngPPSSrch), 공사(CnstwkPPSSrch)
+입찰공고 API: https://apis.data.go.kr/1230000/ad/BidPublicInfoService
+낙찰정보 API: https://apis.data.go.kr/1230000/as/ScsbidInfoService
+계약정보 API: https://apis.data.go.kr/1230000/ao/CntrctInfoService
+사전규격 API: https://apis.data.go.kr/1230000/ao/HrcspSsstndrdInfoService
 응답: XML, 100건/페이지
 """
 
@@ -27,6 +29,30 @@ BID_SERVICES = {
     "용역": "getBidPblancListInfoServcPPSSrch",
     "물품": "getBidPblancListInfoThngPPSSrch",
     "공사": "getBidPblancListInfoCnstwkPPSSrch",
+}
+
+# 낙찰정보 서비스
+AWARD_BASE_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService"
+AWARD_SERVICES = {
+    "용역": "getScsbidListSttusServcPPSSrch",
+    "물품": "getScsbidListSttusThngPPSSrch",
+    "공사": "getScsbidListSttusCnstwkPPSSrch",
+}
+
+# 계약정보 서비스
+CONTRACT_BASE_URL = "https://apis.data.go.kr/1230000/ao/CntrctInfoService"
+CONTRACT_SERVICES = {
+    "용역": "getCntrctInfoListServc",
+    "물품": "getCntrctInfoListThng",
+    "공사": "getCntrctInfoListCnstwk",
+}
+
+# 사전규격정보 서비스 (주의: ServiceKey 대문자 S)
+PRE_SPEC_BASE_URL = "https://apis.data.go.kr/1230000/ao/HrcspSsstndrdInfoService"
+PRE_SPEC_SERVICES = {
+    "용역": "getPublicPrcureThngInfoServc",
+    "물품": "getPublicPrcureThngInfoThng",
+    "공사": "getPublicPrcureThngInfoCnstwk",
 }
 
 ROWS_PER_PAGE = 100
@@ -133,6 +159,144 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     )
 
 
+def _award_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
+    """낙찰정보 XML item → Notice."""
+
+    def t(tag: str) -> str:
+        el = item.find(tag)
+        return el.text.strip() if el is not None and el.text else ""
+
+    bid_no_raw = t("bidNtceNo")
+    bid_no_ver = t("bidNtceOrd")
+    full_bid_no = f"{bid_no_raw}-{bid_no_ver}" if bid_no_ver else bid_no_raw
+
+    sucsf_date = parse_date(t("fnlSucsfDate")) or parse_date(t("rlOpengDt")) or ""
+    sucsf_amt = t("sucsfbidAmt")
+    budget = int(float(sucsf_amt)) if sucsf_amt else None
+
+    url = f"https://www.g2b.go.kr:8081/ep/invitation/publish/bidInfoDtl.do?bidno={bid_no_raw}&bidseq={bid_no_ver}"
+
+    return Notice(
+        source="나라장터",
+        bid_no=f"낙찰-{bid_type}-{full_bid_no}",
+        title=t("bidNtceNm"),
+        organization=t("dminsttNm"),
+        start_date=sucsf_date or None,
+        end_date=None,
+        status="closed",
+        url=url,
+        detail_url=url,
+        budget=budget,
+        extra={
+            k: v for k, v in {
+                "bid_type": bid_type,
+                "data_type": "낙찰",
+                "winner_name": t("bidwinnrNm"),
+                "winner_bizno": t("bidwinnrBizno"),
+                "winner_ceo": t("bidwinnrCeoNm"),
+                "winner_addr": t("bidwinnrAdrs"),
+                "winner_tel": t("bidwinnrTelNo"),
+                "sucsf_amt": budget,
+                "sucsf_rate": t("sucsfbidRate"),
+                "open_date": t("rlOpengDt"),
+                "participant_count": t("prtcptCnum"),
+            }.items() if v is not None and v != ""
+        } or None,
+    )
+
+
+def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
+    """계약정보 XML item → Notice."""
+
+    def t(tag: str) -> str:
+        el = item.find(tag)
+        return el.text.strip() if el is not None and el.text else ""
+
+    cntrct_no = t("dcsnCntrctNo") or t("untyCntrctNo")
+    cntrct_date = parse_date(t("cntrctCnclsDate")) or ""
+    cntrct_end = parse_date(t("cntrctPrd")) or ""
+
+    amt_raw = t("thtmCntrctAmt") or t("totCntrctAmt")
+    budget = int(float(amt_raw)) if amt_raw else None
+
+    detail_url = t("cntrctDtlInfoUrl") or "http://www.g2b.go.kr"
+
+    return Notice(
+        source="나라장터",
+        bid_no=f"계약-{bid_type}-{cntrct_no}",
+        title=t("cntrctNm"),
+        organization=t("cntrctInsttNm"),
+        start_date=cntrct_date or None,
+        end_date=cntrct_end or None,
+        status=determine_status(cntrct_end),
+        url=detail_url,
+        detail_url=detail_url,
+        budget=budget,
+        region=t("cntrctInsttJrsdctnDivNm"),
+        extra={
+            k: v for k, v in {
+                "bid_type": bid_type,
+                "data_type": "계약",
+                "bid_no_ref": t("ntceNo"),
+                "bsns_div": t("bsnsDivNm"),
+                "contract_method": t("cntrctCnclsMthdNm"),
+                "contact": f"{t('cntrctInsttOfclNm')} {t('cntrctInsttOfclTelNo')}".strip(),
+                "guarantee_rate": t("grntymnyRate"),
+                "base_law": t("baseLawNm"),
+            }.items() if v is not None and v != ""
+        } or None,
+    )
+
+
+def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
+    """사전규격정보 XML item → Notice."""
+
+    def t(tag: str) -> str:
+        el = item.find(tag)
+        return el.text.strip() if el is not None and el.text else ""
+
+    ref_no = t("bfSpecRgstNo") or t("refNo")
+    rcpt_date = parse_date(t("rcptDt")) or ""
+    opinion_close = parse_date(t("opninRgstClseDt")) or ""
+
+    budget_raw = t("asignBdgtAmt")
+    budget = int(float(budget_raw)) if budget_raw else None
+
+    # 규격서 첨부파일 (최대 5개)
+    attachments = []
+    for i in range(1, 6):
+        furl = t(f"specDocFileUrl{i}")
+        if furl:
+            attachments.append({"name": f"규격서{i}", "url": furl})
+
+    return Notice(
+        source="나라장터",
+        bid_no=f"사전규격-{bid_type}-{ref_no}",
+        title=t("prdctClsfcNoNm") or f"사전규격 {ref_no}",
+        organization=t("orderInsttNm"),
+        start_date=rcpt_date or None,
+        end_date=opinion_close or None,
+        status=determine_status(opinion_close),
+        url=f"https://www.g2b.go.kr",
+        detail_url="",
+        budget=budget,
+        category=t("prdctClsfcNoNm"),
+        attachments=attachments or None,
+        extra={
+            k: v for k, v in {
+                "bid_type": bid_type,
+                "data_type": "사전규격",
+                "rl_dminstt": t("rlDminsttNm"),
+                "contact": f"{t('ofclNm')} {t('ofclTelNo')}".strip(),
+                "sw_biz": t("swBizObjYn"),
+                "delivery_date": t("dlvrTmlmtDt"),
+                "delivery_days": t("dlvrDaynum"),
+                "bid_ntce_list": t("bidNtceNoList"),
+            }.items() if v is not None and v != ""
+        } or None,
+    )
+
+
 class NaraCollector(BaseCollector):
     """나라장터 입찰공고 수집기."""
 
@@ -183,9 +347,9 @@ class NaraCollector(BaseCollector):
 
         return notices, pages_processed
 
-    async def _request_with_retry(self, client, operation, params, bid_type):
+    async def _request_with_retry(self, client, operation, params, bid_type, base_url=None):
         """429 에러 재시도 포함 API 요청."""
-        url = f"{BASE_URL}/{operation}"
+        url = f"{base_url or BASE_URL}/{operation}"
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 resp = await client.get(url, params=params)
@@ -205,6 +369,106 @@ class NaraCollector(BaseCollector):
                 logger.warning(f"[나라장터-{bid_type}] 요청 실패, 재시도: {e}")
                 await asyncio.sleep(5)
         return None
+
+    async def collect_awards(self, days: int = 1, **kwargs) -> list[Notice]:
+        """낙찰정보 수집. 낙찰자, 낙찰금액, 낙찰율 등 포함."""
+        return await self._fetch_extended(
+            days=days,
+            base_url=AWARD_BASE_URL,
+            services=AWARD_SERVICES,
+            item_converter=_award_item_to_notice,
+            label="낙찰",
+            service_key_param="serviceKey",
+            **kwargs,
+        )
+
+    async def collect_contracts(self, days: int = 1, **kwargs) -> list[Notice]:
+        """계약정보 수집. 계약명, 계약금액, 계약기간 등 포함."""
+        return await self._fetch_extended(
+            days=days,
+            base_url=CONTRACT_BASE_URL,
+            services=CONTRACT_SERVICES,
+            item_converter=_contract_item_to_notice,
+            label="계약",
+            service_key_param="serviceKey",
+            **kwargs,
+        )
+
+    async def collect_pre_specs(self, days: int = 1, **kwargs) -> list[Notice]:
+        """사전규격정보 수집. 규격서, 의견마감일, 배정예산 등 포함."""
+        return await self._fetch_extended(
+            days=days,
+            base_url=PRE_SPEC_BASE_URL,
+            services=PRE_SPEC_SERVICES,
+            item_converter=_prespec_item_to_notice,
+            label="사전규격",
+            service_key_param="ServiceKey",  # 대문자 S 필수
+            **kwargs,
+        )
+
+    async def _fetch_extended(
+        self,
+        days: int,
+        base_url: str,
+        services: dict[str, str],
+        item_converter,
+        label: str,
+        service_key_param: str = "serviceKey",
+        **kwargs,
+    ) -> list[Notice]:
+        """확장 서비스 공통 수집 루프."""
+        bid_types = kwargs.get("bid_types", list(services.keys()))
+        date_ranges = _split_date_range(days)
+        notices: list[Notice] = []
+
+        logger.info(f"[나라장터-{label}] 수집 시작: days={days}")
+
+        async with create_client(timeout=30.0) as client:
+            for bid_type in bid_types:
+                operation = services[bid_type]
+                for start_dt, end_dt in date_ranges:
+                    page = 1
+                    while True:
+                        params = {
+                            service_key_param: self.api_key,
+                            "inqryBgnDt": start_dt,
+                            "inqryEndDt": end_dt,
+                            "numOfRows": str(ROWS_PER_PAGE),
+                            "pageNo": str(page),
+                            "inqryDiv": "1",
+                            "type": "xml",
+                        }
+
+                        resp = await self._request_with_retry(
+                            client, operation, params, f"{label}-{bid_type}",
+                            base_url=base_url,
+                        )
+                        if resp is None:
+                            break
+
+                        items, total = _parse_xml_items(resp.content)
+
+                        for item in items:
+                            try:
+                                notice = item_converter(item, bid_type)
+                                notices.append(notice)
+                            except Exception as e:
+                                logger.warning(f"[나라장터-{label}] 항목 파싱 실패: {e}")
+
+                        if page * ROWS_PER_PAGE >= total:
+                            break
+                        page += 1
+
+        # 중복 제거
+        seen = set()
+        deduped = []
+        for n in notices:
+            if n.bid_no not in seen:
+                seen.add(n.bid_no)
+                deduped.append(n)
+
+        logger.info(f"[나라장터-{label}] 수집 완료: {len(deduped)}건")
+        return deduped
 
     async def health_check(self) -> dict:
         """API 연결 상태 확인 — 용역 서비스 1건 조회."""

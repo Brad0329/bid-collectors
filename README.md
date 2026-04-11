@@ -67,6 +67,29 @@ contracts = asyncio.run(collector.collect_contracts(days=1))
 pre_specs = asyncio.run(collector.collect_pre_specs(days=1))
 ```
 
+### 상세 조회 (fetch_detail)
+
+```python
+collector = NaraCollector(api_key="YOUR_KEY")
+
+# 목록에서 가져온 bid_no로 상세 정보 조회
+detail = asyncio.run(collector.fetch_detail("용역-R26BK01457928-000"))
+if detail:
+    print(detail["content"])  # 사업개요
+
+# K-Startup도 동일 패턴
+kstartup = KstartupCollector(api_key="YOUR_KEY")
+detail = asyncio.run(kstartup.fetch_detail("KSTARTUP-177157"))
+```
+
+지원 현황:
+
+| 수집기 | fetch_detail | 방식 |
+|--------|-------------|------|
+| NaraCollector | O | g2b.go.kr 상세 페이지 스크래핑 |
+| KstartupCollector | O | API 단건 필터 조회 |
+| 그 외 | X | None 반환 (미지원) |
+
 ### GenericScraper (config 기반 HTML 스크래핑)
 
 ```python

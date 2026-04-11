@@ -73,6 +73,63 @@ class KstartupCollector(BaseCollector):
 
         return notices, pages_processed
 
+    async def fetch_detail(self, bid_no: str) -> dict | None:
+        """단일 공고 상세 조회. content 전문 + 추가 필드.
+
+        Args:
+            bid_no: "KSTARTUP-{pbanc_sn}" 형식
+
+        Returns:
+            상세 정보 dict 또는 None
+        """
+        pbanc_id = bid_no.replace("KSTARTUP-", "")
+        if not pbanc_id:
+            return None
+
+        try:
+            async with create_client(timeout=15.0) as client:
+                params = {
+                    "serviceKey": self.api_key,
+                    "page": "1",
+                    "perPage": "1",
+                    "returnType": "json",
+                    "cond[pbanc_sn::EQ]": pbanc_id,
+                }
+                resp = await client.get(API_URL, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+
+                items = data.get("data", [])
+                if not items:
+                    return None
+
+                item = items[0]
+                content = clean_html_to_text(item.get("pbanc_ctnt", "") or "")
+
+                return {
+                    k: v for k, v in {
+                        "content": content,
+                        "target": clean_html_to_text(item.get("aply_trgt_ctnt") or ""),
+                        "target_age": item.get("biz_trgt_age") or "",
+                        "biz_year": item.get("biz_enyy") or "",
+                        "excl_target": clean_html_to_text(item.get("aply_excl_trgt_ctnt") or ""),
+                        "apply_method": clean_html_to_text(
+                            item.get("aply_mthd_onli_rcpt_istc")
+                            or item.get("aply_mthd_vst_rcpt_istc")
+                            or item.get("aply_mthd_etc_istc")
+                            or ""
+                        ),
+                        "department": clean_html_to_text(item.get("biz_prch_dprt_nm") or ""),
+                        "contact": item.get("prch_cnpl_no") or "",
+                        "biz_name": clean_html_to_text(item.get("intg_pbanc_biz_nm") or ""),
+                        "apply_url": item.get("biz_aply_url") or "",
+                    }.items() if v
+                } or None
+
+        except Exception as e:
+            logger.warning(f"[K-Startup] fetch_detail 실패 ({bid_no}): {e}")
+            return None
+
     async def health_check(self) -> dict:
         start = time.time()
         try:

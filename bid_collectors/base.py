@@ -73,6 +73,10 @@ class BaseCollector(ABC):
             is_partial=is_partial,
         )
 
+    async def fetch_detail(self, bid_no: str) -> dict | None:
+        """단일 공고 상세 조회. 지원하지 않는 수집기는 None 반환."""
+        return None
+
     async def health_check(self) -> dict:
         """API 연결 상태 확인. 서브클래스에서 오버라이드 권장."""
         return {"status": "ok", "source": self.source_name, "message": "not implemented"}

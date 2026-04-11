@@ -370,6 +370,90 @@ class NaraCollector(BaseCollector):
                 await asyncio.sleep(5)
         return None
 
+    async def fetch_detail(self, bid_no: str) -> dict | None:
+        """단일 공고 상세 조회. g2b.go.kr 상세 페이지에서 사업개요 스크래핑.
+
+        나라장터 목록 API에는 content(사업개요)가 없으므로,
+        g2b.go.kr 상세 페이지를 스크래핑하여 추가 정보를 가져온다.
+
+        Args:
+            bid_no: "용역-R26BK01457928-000" 형식
+
+        Returns:
+            dict | None: {"content": str, ...} 또는 None
+        """
+        try:
+            # bid_no 파싱: "용역-R26BK01457928-000"
+            parts = bid_no.split("-", 1)
+            if len(parts) < 2:
+                return None
+            bid_no_rest = parts[1]  # "R26BK01457928-000"
+            last_dash = bid_no_rest.rfind("-")
+            if last_dash == -1:
+                ntce_no = bid_no_rest
+                ntce_ord = ""
+            else:
+                ntce_no = bid_no_rest[:last_dash]
+                ntce_ord = bid_no_rest[last_dash + 1:]
+
+            # g2b.go.kr 상세 페이지 스크래핑
+            detail_url = (
+                f"https://www.g2b.go.kr:8081/ep/invitation/publish/"
+                f"bidInfoDtl.do?bidno={ntce_no}&bidseq={ntce_ord}"
+            )
+
+            async with create_client(timeout=15.0) as client:
+                resp = await client.get(detail_url)
+                resp.raise_for_status()
+
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            # 사업개요 추출 (다양한 셀렉터 시도)
+            content = ""
+            for selector in [
+                "div.detail_cont",
+                "td.info_contents",
+                "div.bid_detail",
+            ]:
+                el = soup.select_one(selector)
+                if el:
+                    from .utils.text import clean_html_to_text
+                    content = clean_html_to_text(el.get_text())
+                    break
+
+            if not content:
+                # 테이블에서 "사업개요" 또는 "공고내용" 행 찾기
+                for th in soup.find_all(["th", "dt"]):
+                    text = th.get_text(strip=True)
+                    if text in ("사업개요", "공고내용", "입찰공고내용"):
+                        td = th.find_next(["td", "dd"])
+                        if td:
+                            from .utils.text import clean_html_to_text
+                            content = clean_html_to_text(td.get_text())
+                            break
+
+            result = {"content": content} if content else {}
+
+            # 추가 첨부파일 추출
+            attachments = []
+            for a_tag in soup.select("a[href*='fileDownload'], a[href*='download']"):
+                href = a_tag.get("href", "")
+                name = a_tag.get_text(strip=True)
+                if href and name:
+                    if not href.startswith("http"):
+                        href = f"https://www.g2b.go.kr{href}"
+                    attachments.append({"name": name, "url": href})
+            if attachments:
+                result["attachments"] = attachments
+
+            return result or None
+
+        except Exception as e:
+            logger.warning(f"[나라장터] fetch_detail 실패 ({bid_no}): {e}")
+            return None
+
     async def collect_awards(self, days: int = 1, **kwargs) -> list[Notice]:
         """낙찰정보 수집. 낙찰자, 낙찰금액, 낙찰율 등 포함."""
         return await self._fetch_extended(

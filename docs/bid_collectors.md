@@ -132,9 +132,14 @@ BidWatch 본체는 `Notice` 리스트를 받아서 `bid_notices` 또는 `scraped
 
 ## 6. generic_scraper.py
 
-lets_portal의 범용 스크래퍼 엔진을 이 패키지에 포함.
-AI가 생성한 `scraper_config` JSON을 받아 임의의 게시판을 파싱.
+> **상세 설계:** [generic_scraper.md](generic_scraper.md) — 구현 상세 + 향후 확장 로드맵
 
-- config 스키마: [dev_reference.md](dev_reference.md) §6 참조
+AI가 생성한 `scraper_config` JSON을 받아 임의의 HTML 게시판을 파싱하는 범용 수집 엔진.
+
+- **클래스:** `GenericScraper(BaseCollector)` — config 기반, API 키 불필요
+- **config 모델:** `ScraperConfig` (Pydantic v2) — 필드 검증 + AI 스키마 계약
+- **lets_portal 호환:** 39개 기존 config 수정 없이 사용 가능
+- **config 스키마:** [generic_scraper.md](generic_scraper.md) §3 참조
+- **원본 레퍼런스:** [dev_reference.md](dev_reference.md) §5-6
 - BidWatch에서는 `scraper_registry.scraper_config`에 저장된 설정으로 호출
-- 출력은 동일한 `Notice` 모델
+- 출력은 동일한 `Notice` 모델 + `CollectResult` 래핑

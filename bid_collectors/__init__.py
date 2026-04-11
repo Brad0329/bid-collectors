@@ -9,6 +9,7 @@ from .bizinfo import BizinfoCollector
 from .subsidy24 import Subsidy24Collector
 from .kstartup import KstartupCollector
 from .smes import SmesCollector
+from .generic_scraper import GenericScraper, ScraperConfig
 
 __all__ = [
     "Notice",
@@ -19,4 +20,6 @@ __all__ = [
     "Subsidy24Collector",
     "KstartupCollector",
     "SmesCollector",
+    "GenericScraper",
+    "ScraperConfig",
 ]

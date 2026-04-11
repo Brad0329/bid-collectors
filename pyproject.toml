@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bid-collectors"
-version = "0.1.0"
+version = "1.0.0"
 description = "공공기관 입찰공고/지원사업 API 통합 수집 패키지"
 requires-python = ">=3.11"
 dependencies = [

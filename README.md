@@ -70,25 +70,25 @@ pre_specs = asyncio.run(collector.collect_pre_specs(days=1))
 ### 상세 조회 (fetch_detail)
 
 ```python
-collector = NaraCollector(api_key="YOUR_KEY")
-
-# 목록에서 가져온 bid_no로 상세 정보 조회
-detail = asyncio.run(collector.fetch_detail("용역-R26BK01457928-000"))
-if detail:
-    print(detail["content"])  # 사업개요
-
-# K-Startup도 동일 패턴
+# K-Startup: API 단건 조회로 전체 content 보충
 kstartup = KstartupCollector(api_key="YOUR_KEY")
 detail = asyncio.run(kstartup.fetch_detail("KSTARTUP-177157"))
+if detail:
+    print(detail["content"])  # 사업개요 전문
 ```
 
 지원 현황:
 
-| 수집기 | fetch_detail | 방식 |
+| 수집기 | fetch_detail | 비고 |
 |--------|-------------|------|
-| NaraCollector | O | g2b.go.kr 상세 페이지 스크래핑 |
+| NaraCollector | X (None) | API 단건 조회 미지원. 수집 시 extra에 상세 필드 포함 |
 | KstartupCollector | O | API 단건 필터 조회 |
 | 그 외 | X | None 반환 (미지원) |
+
+> **나라장터 참고**: data.go.kr API가 `bidNtceNo` 단건 조회를 지원하지 않으며,
+> 사업개요(content) 필드도 제공하지 않습니다. 대신 수집 시점에 평가비율(`tech_eval_ratio`,
+> `price_eval_ratio`), 낙찰방식(`award_method`), 조달분류, API 제공 상세 URL 등을
+> `Notice.extra`에 저장합니다.
 
 ### GenericScraper (config 기반 HTML 스크래핑)
 

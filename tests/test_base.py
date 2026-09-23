@@ -115,3 +115,59 @@ class TestBaseCollectorCollect:
         assert result.total_fetched == 0
         assert result.total_after_dedup == 0
         assert result.is_partial is False
+
+    @pytest.mark.asyncio
+    async def test_fetch_errors_make_partial_and_keep_notices(self):
+        """_fetch가 3번째 요소로 errors를 주면 공고는 그대로, is_partial=True."""
+
+        class PartialCollector(BaseCollector):
+            source_name = "partial"
+
+            async def _fetch(self, days=1, **kwargs):
+                return [_make_notice("A"), _make_notice("B")], 2, ["페이지 3 요청 실패"]
+
+        result = await PartialCollector(api_key="key").collect()
+        assert len(result.notices) == 2
+        assert result.pages_processed == 2
+        assert result.errors == ["페이지 3 요청 실패"]
+        assert result.is_partial is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_empty_errors_not_partial(self):
+        class CleanCollector(BaseCollector):
+            source_name = "clean"
+
+            async def _fetch(self, days=1, **kwargs):
+                return [_make_notice()], 1, []
+
+        result = await CleanCollector(api_key="key").collect()
+        assert result.errors == []
+        assert result.is_partial is False
+
+    @pytest.mark.asyncio
+    async def test_exception_message_key_masked(self):
+        """_fetch 예외 문자열에 든 키도 errors로 새지 않는다."""
+
+        class LeakyCollector(BaseCollector):
+            source_name = "leaky"
+
+            async def _fetch(self, days=1, **kwargs):
+                raise RuntimeError(f"GET https://x/api?serviceKey={self.api_key}&page=1 실패")
+
+        result = await LeakyCollector(api_key="RAWKEY123").collect()
+        assert result.errors == ["GET https://x/api?serviceKey=***&page=1 실패"]
+
+
+class TestMaskSecret:
+    def test_query_params_masked(self):
+        from bid_collectors.base import mask_secret
+
+        text = "url?serviceKey=a%2Bb&x=1 ServiceKey=zz crtfcKey=k1'"
+        assert mask_secret(text) == "url?serviceKey=***&x=1 ServiceKey=*** crtfcKey=***'"
+
+    def test_raw_and_encoded_secret_masked(self):
+        from bid_collectors.base import mask_secret
+
+        secret = "Ab+c/D=="
+        text = f"raw {secret} enc Ab%2Bc%2FD%3D%3D"
+        assert mask_secret(text, secret) == "raw *** enc ***"

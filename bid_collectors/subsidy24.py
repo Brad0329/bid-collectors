@@ -33,14 +33,20 @@ class Subsidy24Collector(BaseCollector):
 
     source_name = "보조금24"
 
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
         only_business = kwargs.get("only_business", False)
-        cutoff = datetime.now() - timedelta(days=days)
-        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+        cutoff = (datetime.now() - timedelta(days=days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        # 수정일시 값은 "YYYYMMDDHHMMSS" 문자열 비교다 — "YYYY-MM-DD ..."로 보내면 '0' > '-'라 거의 전부가 걸린다
+        # (2026-09-23 실측: 1일치가 10,498건/전체 10,933건 → 이 형식으로 24건)
+        cutoff_str = cutoff.strftime("%Y%m%d%H%M%S")
 
         notices: list[Notice] = []
+        errors: list[str] = []
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
+        total_count = 0
 
         async with create_client(timeout=30.0) as client:
             page = 1
@@ -57,11 +63,15 @@ class Subsidy24Collector(BaseCollector):
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as e:
-                    logger.error(f"[보조금24] 페이지 {page} 요청 실패: {e}")
+                    msg = self._mask(f"페이지 {page} 요청 실패: {type(e).__name__}: {e}")
+                    logger.error(f"[보조금24] {msg}")
+                    errors.append(msg)
                     break
 
                 if "code" in data and data["code"] < 0:
-                    logger.error(f"[보조금24] API 에러: {data.get('msg', '')}")
+                    msg = self._mask(f"페이지 {page} API 에러: {data['code']} - {data.get('msg', '')}")
+                    logger.error(f"[보조금24] {msg}")
+                    errors.append(msg)
                     break
 
                 items = data.get("data", [])
@@ -82,8 +92,15 @@ class Subsidy24Collector(BaseCollector):
                 if page * DEFAULT_PER_PAGE >= total_count:
                     break
                 page += 1
+            else:
+                msg = (
+                    f"max_pages={max_pages} 상한 도달로 중단 — 전체 {total_count}건 중 "
+                    f"{max_pages * DEFAULT_PER_PAGE}건까지만 조회"
+                )
+                logger.warning(f"[보조금24] {msg}")
+                errors.append(msg)
 
-        return notices, pages_processed
+        return notices, pages_processed, errors
 
     async def health_check(self) -> dict:
         start = time.time()
@@ -103,7 +120,7 @@ class Subsidy24Collector(BaseCollector):
                 return {"status": "ok", "source": self.source_name, "response_time_ms": ms}
         except Exception as e:
             ms = int((time.time() - start) * 1000)
-            return {"status": "error", "source": self.source_name, "message": str(e), "response_time_ms": ms}
+            return {"status": "error", "source": self.source_name, "message": self._mask(str(e)), "response_time_ms": ms}
 
 
 def _item_to_notice(item: dict) -> Notice | None:

@@ -153,9 +153,12 @@ class CollectResult(BaseModel):
     total_fetched: int
     total_after_dedup: int
     pages_processed: int
-    errors: list[str]
-    is_partial: bool
+    errors: list[str]    # 페이지 실패·API 에러·max_pages 절단 (API 키는 ***로 가려짐)
+    is_partial: bool     # errors가 있으면 True — "사이트 장애"와 "공고 없음"을 구분한다 (v1.1.0)
 ```
+
+GenericScraper에 SSRF 방어 등 요청 검사 훅을 걸려면 `GenericScraper(config, event_hooks={"request": [hook]})` (v1.1.0).
+의미 표: `docs/interface.md` §3.
 
 ## 테스트
 

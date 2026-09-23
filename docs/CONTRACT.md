@@ -41,7 +41,7 @@
 ## 변경 이력 (최신이 위)
 | 날짜 | 변경안 (무엇을, 왜, 영향 범위, 버전) | 사용자 확인 | 반영 |
 |---|---|---|---|
-| (예정) | v1.1.0 신뢰성 — 페이지 실패·쿼터 초과·max_pages 절단을 `errors`/`is_partial`로 보고(기존 필드, 의미만 채움), `GenericScraper`·`create_client`에 요청 검사 훅 선택 인자 추가 — minor | 2026-09-23 bidwatch 세션 합의 | Phase 004 |
+| 2026-09-23 | v1.1.0 신뢰성 — 페이지 실패·쿼터 초과·max_pages 절단을 `errors`/`is_partial`로 보고(기존 필드, 의미만 채움. errors 문자열의 API 키는 마스킹) · `GenericScraper(config, event_hooks=None)` 선택 인자 추가(httpx `event_hooks` 형식 그대로, session_init_url·페이지·health_check·리다이렉트 전부에 걸린다. `create_client`는 원래 `**kwargs`로 넘기던 것을 문서화) · 나라장터 확장 3메서드는 반환형 유지 — 재시도 소진 시 조용히 빈 결과 대신 예외(키 마스킹) · 내부: `_fetch`가 `(notices, pages, errors)` 3-튜플을 돌려줄 수 있다(2-튜플도 계속 받음, BidWatch는 상속하지 않음) — minor | ✅ 2026-09-23 (bidwatch 세션 합의 + 이 세션 확정) | Phase 004 |
 | 2026-04-13 | 나라장터 `fetch_detail` 스크래핑 제거 → None | ✅ | `1a037e3` |
 | 2026-04-11 | v1.0.0 — `GenericScraper`/`ScraperConfig` export, 나라장터 확장 3메서드, `fetch_detail` 추가 | ✅ | `3f21d98`·`714420e` |
 | 2026-04-06 | 초기 계약 — `Notice`·`CollectResult`·`BaseCollector._fetch` 템플릿 메서드 | ✅ | `c61291e`·`c188559` |

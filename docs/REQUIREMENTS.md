@@ -6,8 +6,8 @@
 >
 > **F-001~F-009는 2026-09-23 v1.0.0 구현에서 역작성했다** — 코드의 현재 동작을 기준으로 적었고,
 > 각 기준 뒤에 대응 테스트를 `→ 테스트명`(파일은 `tests/test_<수집기>.py`)으로, 없으면 `→ 테스트 없음`으로 표시했다.
-> `(현재 실패)` = 픽스처 날짜가 2026-04로 고정돼 실행 시점 cutoff에 걸리는 기존 결함(plan.md Phase 004에서 고친다).
 > 테스트 없는 기준은 그 기능을 다음에 건드릴 때 테스트부터 붙인다.
+> (고정 날짜 픽스처로 27건이 실패하던 `(현재 실패)` 표시는 Phase 004에서 상대 날짜로 고쳐 걷어냈다.)
 > 공개 계약(필드·시그니처)의 원본은 `docs/interface.md`, 계약 변경 결정은 `docs/CONTRACT.md`.
 
 ## 시스템 목표
@@ -29,9 +29,10 @@
   - [x] `_fetch()`가 예외를 던지면 `errors`에 메시지, `is_partial=True`, 공고 0건 → `test_base::test_collect_handles_fetch_error`
   - [x] `health_check()`는 예외를 던지지 않고 `{"status": "ok"|"error", ...}`를 반환한다 → 수집기별 `test_health_check_*`
   - [x] 지원하지 않는 수집기의 `fetch_detail()`은 `None` → 테스트 없음(기본 구현이 한 줄)
-- **알려진 위반 (v1.1에서 고침)**: 수집기 내부에서 페이지 요청이 실패하면 로그만 남기고 `break`해
-  `errors`가 비고 `is_partial=False`로 돌아온다 — 소비자가 "장애"와 "공고 없음"을 구분 못 한다(조용한 실패).
-  `max_pages` 상한에 걸려 멈춰도 알리지 않는다(조용한 절단). → `work_log/plan.md` Phase 004.
+  - [x] (v1.1) `_fetch`가 세 번째 요소로 errors를 주면 공고는 보존하고 `is_partial=True` → `test_base::test_fetch_errors_make_partial_and_keep_notices`·`test_fetch_empty_errors_not_partial`
+  - [x] (v1.1) 페이지 요청 실패는 앞 페이지 결과를 남기고 errors에 원인을 담는다 — 1페이지 실패면 0건 + errors(“장애”와 “공고 없음” 구분) → 수집기별 `test_*_error_graceful`·`test_http_error_returns_empty`·`test_second_page_*`
+  - [x] (v1.1) `max_pages` 상한에서 멈추면 잘렸다는 사실과 전체 건수를 errors로 알린다(기업마당·K-Startup·보조금24·중소벤처기업부) → 수집기별 `test_max_pages_truncation_reported`
+  - [x] (v1.1) errors·health_check 메시지에 API 키(쿼리 파라미터 값·원문·URL 인코딩)가 실리지 않는다 → `TestMaskSecret` 2건·`test_exception_message_key_masked`·수집기별 `test_api_key_masked_in_errors`·`test_request_failure_masks_key`
 
 ## 기능 요구사항
 
@@ -45,42 +46,45 @@
   - [x] budget = 배정예산, 없으면 추정가격(0원도 유효값) → `test_budget_and_est_price`
   - [x] 공고첨부 1~10 + 규격서 1~10을 attachments로 병합 → `test_attachments_parsing`
   - [x] 여러 페이지를 totalCount까지 넘긴다 → `test_multi_page_pagination`
-  - [x] 429를 받으면 재시도해 성공 응답을 쓴다 → `test_429_retry_logic` · 재시도 소진 시 0건 → `test_429_exhausts_retries`
-  - [ ] 한 서비스의 `resultCode != 00`(쿼터 초과 포함)이 앞서 수집한 서비스 결과를 버리지 않는다 → **미충족**(Phase 004)
-- **상태**: 완료 (2026-04-06, 상세 필드 보강 2026-04-13)
+  - [x] 429를 받으면 재시도해 성공 응답을 쓴다 → `test_429_retry_logic` · 재시도 소진 시 0건 + errors → `test_429_exhausts_retries`
+  - [x] 한 서비스의 `resultCode != 00`(쿼터 초과 포함)이 앞서 수집한 서비스 결과를 버리지 않는다 — errors에 기록하고
+    그 서비스의 남은 기간은 요청하지 않는다 → `test_quota_error_keeps_earlier_services`
+- **상태**: 완료 (2026-04-06, 상세 필드 보강 2026-04-13, 부분 결과 보존 2026-09-23 Phase 004)
 
 ### F-002: 나라장터 확장 — 낙찰·계약·사전규격 (`collect_awards` / `collect_contracts` / `collect_pre_specs`)
 - **설명**: 입찰공고와 같은 루프(`_fetch_extended`)로 세 API를 조회해 **`list[Notice]`를 바로 반환**한다
   (`CollectResult` 아님 — `collect()` 계약 밖의 확장 메서드). bid_no 접두사 `낙찰-`·`계약-`·`사전규격-`.
   사전규격 API만 `ServiceKey`(대문자 S). BidWatch는 사전규격을 `nara_prespec` 출처로 연쇄 수집한다.
 - **수용 기준**:
-  - [ ] 사전규격: bid_no = `사전규격-{type}-{bfSpecRgstNo}`, 의견마감일이 end_date, 규격서 1~5가 attachments → 테스트 없음
-  - [ ] 낙찰: status가 항상 `closed`, extra에 낙찰자·낙찰률·참가자 수 → 테스트 없음
-  - [ ] 계약: bid_no = `계약-{type}-{dcsnCntrctNo}` → 테스트 없음
-  - [ ] API 에러 응답 시 예외가 호출자에게 그대로 전파된다(현재 동작 — 부분 결과 없음) → 테스트 없음
-- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11)
+  - [x] 사전규격: bid_no = `사전규격-{type}-{bfSpecRgstNo}`, 의견마감일이 end_date, 규격서 1~5가 attachments, `ServiceKey` 파라미터 → `TestNaraExtended::test_pre_specs_mapping`
+  - [x] 낙찰: status가 항상 `closed`, extra에 낙찰자·낙찰률·참가자 수 → `test_awards_mapping`
+  - [x] 계약: bid_no = `계약-{type}-{dcsnCntrctNo}` → `test_contracts_mapping`
+  - [x] API 에러 응답 시 예외가 호출자에게 그대로 전파된다(부분 결과 없음 — 반환형이 list라 errors를 담을 곳이 없다, CONTRACT.md) → `test_api_error_propagates`
+  - [x] (v1.1) 요청 재시도 소진도 조용한 빈 결과가 아니라 `RuntimeError`, 메시지에 키 없음 → `test_request_failure_raises_masked`
+- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23)
 
 ### F-003: K-Startup 사업공고 수집 (`KstartupCollector`)
 - **설명**: odcloud 형식 JSON. 접수시작일이 cutoff(자정 절삭) 이전이면 제외. `only_ongoing=True`(기본)면
   모집중만 서버 필터. 상태는 API의 `rcrt_prgs_yn`으로 판정. content 500자 절단(전문은 `fetch_detail`).
 - **수용 기준**:
-  - [x] bid_no = `KSTARTUP-{pbanc_sn}` → `test_bid_no_format` (현재 실패)
+  - [x] bid_no = `KSTARTUP-{pbanc_sn}` → `test_bid_no_format`
   - [x] cutoff 이전 접수시작 공고는 None → `test_cutoff_filtering_old_item_returns_none`
-  - [x] url = 상세 → 신청 → 안내 URL 순 폴백 → `test_url_fallback_chain_*` (현재 실패)
+  - [x] url = 상세 → 신청 → 안내 URL 순 폴백 → `test_url_fallback_chain_*`
   - [x] `only_ongoing=True`면 `cond[rcrt_prgs_yn::EQ]=Y`를 보낸다 → `test_only_ongoing_param`
-  - [x] 여러 페이지 수집 → `test_multi_page_pagination` (현재 실패)
-  - [x] HTTP·네트워크 오류 시 예외 없이 반환 → `test_http_error_graceful`·`test_network_error_graceful` (단 errors 비어 있음 — 위 '알려진 위반')
+  - [x] 여러 페이지 수집 → `test_multi_page_pagination`
+  - [x] HTTP·네트워크 오류 시 예외 없이 반환하고 errors에 원인 → `test_http_error_graceful`·`test_network_error_graceful`
 - **상태**: 완료 (2026-04-06)
 
 ### F-004: 기업마당 지원사업 수집 (`BizinfoCollector`)
 - **설명**: 별도 키 `BIZINFO_API_KEY`. API에 날짜 필터가 없어 전체를 받으며 `creatPnttm` 기준 클라이언트 필터.
   정렬이 보장되지 않아 페이지 마지막 3건이 모두 cutoff 이전일 때만 조기 종료.
 - **수용 기준**:
-  - [x] bid_no = `BIZINFO-{pblancId}` → `test_bid_no_format` (현재 실패)
-  - [x] `reqstBeginEndDe`("A ~ B")에서 시작·종료일을 뽑는다 → `test_date_parsing_period_format` (현재 실패)
+  - [x] bid_no = `BIZINFO-{pblancId}` → `test_bid_no_format`
+  - [x] `reqstBeginEndDe`("A ~ B")에서 시작·종료일을 뽑는다 → `test_date_parsing_period_format`
   - [x] cutoff 이전 생성 공고는 None, 생성일 없으면 통과 → `test_old_item_returns_none`·`test_empty_creatpnttm_not_filtered`
   - [x] 인쇄본·첨부 두 파일을 attachments로 → `TestParseAttachments` 5건
-  - [x] 여러 페이지 수집 → `test_multi_page_pagination` (현재 실패)
+  - [x] 여러 페이지 수집 → `test_multi_page_pagination`
+  - [x] 2페이지 실패 시 1페이지 결과 보존 + errors → `test_second_page_failure_keeps_first_page`
 - **상태**: 완료 (2026-04-06)
 
 ### F-005: 보조금24 공공서비스 수집 (`Subsidy24Collector`)
@@ -89,11 +93,13 @@
 - **수용 기준**:
   - [x] bid_no = `GOV24-{서비스ID}`, 서비스ID·서비스명 중 하나라도 없으면 None → `test_bid_no_format`·`test_missing_*_returns_none`
   - [x] url = 상세조회URL, 없으면 gov.kr 기본 URL → `test_url_fallback_to_gov_kr`
-  - [x] 신청기한이 end_date, 마감 지나면 closed → `test_end_date_from_deadline` · 통합 매핑 `test_full_item_mapping` (현재 실패)
+  - [x] 신청기한이 end_date, 마감 지나면 closed → `test_end_date_from_deadline` · 통합 매핑 `test_full_item_mapping`
   - [x] `only_business=True`면 기업 키워드 없는 항목 제외 → `test_only_business_filter`
-  - [x] API 에러 코드(`code < 0`) 시 예외 없이 반환 → `test_api_error_response` (단 errors 비어 있음)
-  - [ ] cutoff를 자정으로 절삭한다(다른 수집기와 같게) → **미충족**(`subsidy24.py:38`, Phase 004)
-- **상태**: 완료 (2026-04-06)
+  - [x] API 에러 코드(`code < 0`) 시 예외 없이 반환하고 errors에 코드·메시지 → `test_api_error_response`
+  - [x] cutoff를 자정으로 절삭하고, API 값과 같은 `YYYYMMDDHHMMSS` 형식으로 보낸다 → `test_cutoff_truncated_to_midnight`
+    (v1.0.x는 `YYYY-MM-DD HH:MM:SS`로 보내 문자열 비교가 거의 전부를 통과시켰다 — 1일치 10,498/10,933건, 50페이지 상한에서 조용히 잘림.
+    2026-09-23 실측: 고친 형식으로 1일 24·7일 213·30일 1,406건)
+- **상태**: 완료 (2026-04-06, cutoff 자정 절삭·서버 필터 형식 수정 2026-09-23 Phase 004)
 
 ### F-006: 중소벤처기업부 사업공고 수집 (`SmesCollector`)
 - **설명**: XML, **HTTP**(HTTPS 아님) 엔드포인트. `startDate`/`endDate` 서버 필터. 예산은 `suptScale` 첫 숫자.
@@ -102,7 +108,8 @@
   - [x] 예산을 지원규모 문자열에서 추출, 없으면 None → `test_budget_parsing_from_suptscale`·`test_budget_none_when_missing`
   - [x] fileName/fileUrl 쌍 추출(이름 부족 시 `첨부파일N`) → `TestExtractAttachments` 3건
   - [x] content 500자 절단 → `test_content_truncation_500_chars`
-  - [x] HTTP 오류·XML 에러 응답 시 0건 반환 → `test_http_error_returns_empty`·`test_xml_error_response_returns_empty` (단 errors 비어 있음 — v1.1에서 이 테스트의 기대가 바뀐다)
+  - [x] HTTP 오류·XML 에러 응답 시 0건 + errors에 원인 → `test_http_error_returns_empty`·`test_xml_error_response_returns_empty`
+  - [x] 2페이지 resultCode 에러 시 1페이지 보존 → `test_second_page_xml_error_keeps_first_page`
 - **상태**: 완료 (2026-04-06)
 
 ### F-007: GenericScraper — config 기반 HTML 게시판 수집 (`GenericScraper` / `ScraperConfig`)
@@ -115,13 +122,17 @@
   - [x] cutoff 이전 행은 건너뛰고, 한 페이지가 전부 cutoff 이전이면 다음 페이지를 요청하지 않는다 → `test_cutoff_filtering`·`test_old_content_early_stop`
   - [x] 상대 링크를 link_base(없으면 list_url) 기준 절대 URL로 → `test_relative_url_*`
   - [x] 같은 제목·링크는 같은 bid_no → `test_deterministic`
-  - [x] 2페이지 요청 실패 시 1페이지 결과는 남긴다 → `test_http_error_partial_collect` (단 errors·is_partial로 알리지 않음)
+  - [x] 2페이지 요청 실패 시 1페이지 결과는 남기고 errors에 원인 → `test_http_error_partial_collect`
   - [x] `verify_ssl=False`가 실제 transport에 적용된다 → `test_http::test_verify_false_disables_certificate_check` (2026-09-23 `152f930`)
-  - [ ] 1페이지 요청이 실패하면 0건과 함께 errors에 원인이 담긴다 → **미충족**(Phase 004)
-  - [ ] max_pages에 도달해 멈추면 잘렸다는 사실을 알린다 → **미충족**(Phase 004)
-  - [ ] 소비자가 요청 검사 훅(SSRF 방어)을 주입할 수 있다 → **미충족**(Phase 004)
-- **엣지케이스**: grid_selector가 없으면 0건 / 제목 없는 행·파싱 예외 행은 건너뜀(debug 로그) / `skip_no_date=False`면 날짜 없이 수집.
-- **상태**: 완료 (2026-04-11) — 조용한 실패·절단·훅 주입은 Phase 004
+  - [x] 1페이지 요청이 실패하면 0건과 함께 errors에 원인이 담긴다 → `test_first_page_failure_reports_error`
+  - [x] max_pages에 도달해 멈추면(마지막 페이지에 cutoff 이전 행 없음) 잘렸다는 사실을 알린다, cutoff에 닿았으면 알리지 않는다
+    → `test_max_pages_truncation_reported`·`test_no_truncation_when_cutoff_reached`
+  - [x] 소비자가 요청 검사 훅(SSRF 방어)을 `event_hooks`로 주입할 수 있다 — session_init_url·페이지·리다이렉트·health_check 전부에 걸리고,
+    훅이 던진 예외는 errors에 기록되며 차단된 URL로는 요청이 나가지 않는다 → `TestEventHooks` 3건·`test_http::TestCreateClientEventHooks`
+  - [x] 페이지네이션이 없으면 1페이지만 요청한다(같은 URL을 max_pages번 받지 않는다) → `test_no_pagination_fetches_single_page`
+  - [x] 세션 초기화 요청 실패·행 파싱 예외로 건너뛴 행 수를 errors로 알린다 → `test_session_init_failure_reported`·`test_row_parse_exception_counted`
+- **엣지케이스**: grid_selector가 없으면 0건 / 제목 없는 행은 건너뜀(정상) / `skip_no_date=False`면 날짜 없이 수집.
+- **상태**: 완료 (2026-04-11, 실패·절단 보고·요청 훅 2026-09-23 Phase 004)
 
 ### F-008: 상세 조회 (`fetch_detail(bid_no)`)
 - **설명**: 목록 수집에 없는 정보를 공고 1건 단위로 보충한다. 결과 캐싱은 소비자 몫.
@@ -143,7 +154,7 @@
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).
 2. **공개 범위**: 해당 없음 — 공개 표면은 파이썬 API(`docs/interface.md`)뿐이다. 단 **GenericScraper는 소비자가 넘긴
-   임의 URL로 요청을 보낸다** — SSRF 방어는 소비자 책임이지만 그 훅을 꽂을 자리는 이 패키지가 제공해야 한다(Phase 004).
+   임의 URL로 요청을 보낸다** — SSRF 방어는 소비자 책임이고 그 훅을 꽂을 자리(`GenericScraper(event_hooks=...)`)는 이 패키지가 제공한다(v1.1.0).
 3. **호환성**: Python 3.11+, async(httpx). 소비자 계약 변경은 `docs/CONTRACT.md` 게이트를 탄다
    (필드·인자 추가 = minor, 제거·이름 변경 = major).
 4. **호출 한도**: data.go.kr 개발계정 일 1,000회(서비스별) — 소비자 BidWatch가 수집+상세를 합산 관리한다.

@@ -26,14 +26,16 @@ class KstartupCollector(BaseCollector):
 
     source_name = "K-Startup"
 
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
         only_ongoing = kwargs.get("only_ongoing", True)
         cutoff = (datetime.now() - timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         notices: list[Notice] = []
+        errors: list[str] = []
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
+        total_count = 0
 
         async with create_client(timeout=30.0) as client:
             page = 1
@@ -52,7 +54,9 @@ class KstartupCollector(BaseCollector):
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as e:
-                    logger.error(f"[K-Startup] 페이지 {page} 요청 실패: {e}")
+                    msg = self._mask(f"페이지 {page} 요청 실패: {type(e).__name__}: {e}")
+                    logger.error(f"[K-Startup] {msg}")
+                    errors.append(msg)
                     break
 
                 items = data.get("data", [])
@@ -70,8 +74,15 @@ class KstartupCollector(BaseCollector):
                 if page * DEFAULT_PER_PAGE >= total_count:
                     break
                 page += 1
+            else:
+                msg = (
+                    f"max_pages={max_pages} 상한 도달로 중단 — 전체 {total_count}건 중 "
+                    f"{max_pages * DEFAULT_PER_PAGE}건까지만 조회"
+                )
+                logger.warning(f"[K-Startup] {msg}")
+                errors.append(msg)
 
-        return notices, pages_processed
+        return notices, pages_processed, errors
 
     async def fetch_detail(self, bid_no: str) -> dict | None:
         """단일 공고 상세 조회. content 전문 + 추가 필드.
@@ -127,7 +138,7 @@ class KstartupCollector(BaseCollector):
                 } or None
 
         except Exception as e:
-            logger.warning(f"[K-Startup] fetch_detail 실패 ({bid_no}): {e}")
+            logger.warning(f"[K-Startup] fetch_detail 실패 ({bid_no}): {self._mask(str(e))}")
             return None
 
     async def health_check(self) -> dict:
@@ -149,7 +160,7 @@ class KstartupCollector(BaseCollector):
                 return {"status": "ok", "source": self.source_name, "response_time_ms": ms}
         except Exception as e:
             ms = int((time.time() - start) * 1000)
-            return {"status": "error", "source": self.source_name, "message": str(e), "response_time_ms": ms}
+            return {"status": "error", "source": self.source_name, "message": self._mask(str(e)), "response_time_ms": ms}
 
 
 def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:

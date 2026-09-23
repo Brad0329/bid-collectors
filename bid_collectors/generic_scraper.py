@@ -14,7 +14,7 @@ import logging
 import re
 import time
 from datetime import date, datetime, timedelta
-from typing import Literal
+from typing import Callable, Literal
 from urllib.parse import urljoin
 
 import httpx
@@ -148,11 +148,19 @@ class ScraperConfig(BaseModel):
 class GenericScraper(BaseCollector):
     source_name = "scraper"
 
-    def __init__(self, config: ScraperConfig | dict, **kwargs):
+    def __init__(
+        self,
+        config: ScraperConfig | dict,
+        event_hooks: dict[str, list[Callable]] | None = None,
+        **kwargs,
+    ):
         """config 검증 및 초기화. API 키 불필요.
 
         Args:
             config: ScraperConfig 인스턴스 또는 raw dict (자동 검증)
+            event_hooks: httpx event_hooks 형식({"request": [...], "response": [...]}).
+                session_init_url·목록 페이지·health_check·리다이렉트로 따라가는 요청 전부에 걸린다.
+                소비자의 SSRF 방어 훅을 꽂는 자리 — 훅이 예외를 던지면 그 요청은 실패로 errors에 기록된다.
 
         Raises:
             pydantic.ValidationError: config 검증 실패
@@ -162,8 +170,15 @@ class GenericScraper(BaseCollector):
         self.config = config
         self.source_name = config.name
         self.api_key = None
+        self.event_hooks = event_hooks
 
-    async def _fetch(self, days: int = 30, **kwargs) -> tuple[list[Notice], int]:
+    def _client(self) -> httpx.AsyncClient:
+        kwargs = {"timeout": 15.0, "verify": self.config.verify_ssl}
+        if self.event_hooks:
+            kwargs["event_hooks"] = self.event_hooks
+        return create_client(**kwargs)
+
+    async def _fetch(self, days: int = 30, **kwargs) -> tuple[list[Notice], int, list[str]]:
         """설정된 사이트에서 공고 수집.
 
         Args:
@@ -173,32 +188,44 @@ class GenericScraper(BaseCollector):
                 delay: float -- 페이지 간 요청 간격(초). 기본 0.5
 
         Returns:
-            (notices 리스트, 처리된 페이지 수)
+            (notices 리스트, 처리된 페이지 수, 부분 실패·절단 메시지)
         """
         max_pages = kwargs.get("max_pages", self.config.max_pages)
+        if not self._is_paginated():
+            # 페이지네이션이 없으면 같은 URL을 max_pages번 다시 받게 된다 — 1페이지가 전부다
+            max_pages = 1
         delay = kwargs.get("delay", 0.5)
         cutoff = (datetime.now() - timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0,
         )
 
         all_notices: list[Notice] = []
+        errors: list[str] = []
         pages_processed = 0
+        skipped_rows = 0
+        has_old = False
 
         logger.info(f"[{self.source_name}] 수집 시작: days={days}, max_pages={max_pages}")
 
-        async with create_client(
-            timeout=15.0,
-            verify=self.config.verify_ssl,
-        ) as client:
-            # 세션 초기화 (쿠키 획득)
+        async with self._client() as client:
+            # 세션 초기화 (쿠키 획득) — 실패해도 목록 요청은 시도하되 원인을 남긴다
             if self.config.session_init_url:
-                await client.get(self.config.session_init_url)
+                try:
+                    init_resp = await client.get(self.config.session_init_url)
+                    init_resp.raise_for_status()
+                except Exception as e:
+                    msg = f"세션 초기화 요청 실패: {type(e).__name__}: {e}"
+                    logger.warning(f"[{self.source_name}] {msg}")
+                    errors.append(msg)
 
             for page in range(1, max_pages + 1):
                 try:
                     resp = await self._fetch_page(client, page)
-                except httpx.HTTPError as e:
-                    logger.warning(f"[{self.source_name}] 페이지 {page} 요청 실패: {e}")
+                except Exception as e:
+                    # httpx 오류뿐 아니라 소비자 훅이 던진 예외(SSRF 차단 등)도 여기로 온다
+                    msg = f"페이지 {page} 요청 실패: {type(e).__name__}: {e}"
+                    logger.warning(f"[{self.source_name}] {msg}")
+                    errors.append(msg)
                     break
 
                 # 인코딩 처리
@@ -207,33 +234,43 @@ class GenericScraper(BaseCollector):
                 else:
                     text = resp.text
 
-                page_notices, has_old = self._parse_rows(text, cutoff)
+                page_notices, has_old, page_skipped = self._parse_rows(text, cutoff)
                 all_notices.extend(page_notices)
+                skipped_rows += page_skipped
                 pages_processed += 1
 
                 # 종료 조건
-                if has_old and not page_notices:
-                    break
                 if not page_notices:
                     break
 
                 # 요청 간격
                 if page < max_pages:
                     await asyncio.sleep(delay)
+            else:
+                # 마지막 페이지까지 cutoff 이내 공고만 나왔다면 다음 페이지에도 있을 수 있다
+                if self._is_paginated() and not has_old:
+                    msg = (
+                        f"max_pages={max_pages} 상한 도달로 중단 — {pages_processed}페이지 "
+                        f"{len(all_notices)}건 수집, 다음 페이지 미확인(전체 건수 알 수 없음)"
+                    )
+                    logger.warning(f"[{self.source_name}] {msg}")
+                    errors.append(msg)
+
+        if skipped_rows:
+            msg = f"행 파싱 예외로 {skipped_rows}행 건너뜀"
+            logger.warning(f"[{self.source_name}] {msg}")
+            errors.append(msg)
 
         logger.info(
             f"[{self.source_name}] 수집 완료: {len(all_notices)}건, {pages_processed}페이지"
         )
-        return (all_notices, pages_processed)
+        return (all_notices, pages_processed, errors)
 
     async def health_check(self) -> dict:
         """1페이지 접근 테스트."""
         start = time.time()
         try:
-            async with create_client(
-                timeout=15.0,
-                verify=self.config.verify_ssl,
-            ) as client:
+            async with self._client() as client:
                 resp = await self._fetch_page(client, 1)
                 resp.raise_for_status()
 
@@ -269,6 +306,12 @@ class GenericScraper(BaseCollector):
         resp.raise_for_status()
         return resp
 
+    def _is_paginated(self) -> bool:
+        """다음 페이지 요청이 실제로 달라지는가. POST는 page_param_key, GET은 pagination 접미사."""
+        if self.config.post_data is not None:
+            return bool(self.config.page_param_key)
+        return bool(self.config.pagination)
+
     def _build_page_url(self, page: int) -> str:
         """페이지네이션 패턴에 따라 URL 구성."""
         if page == 1 or not self.config.pagination:
@@ -286,11 +329,11 @@ class GenericScraper(BaseCollector):
         self,
         html: str,
         cutoff: datetime,
-    ) -> tuple[list[Notice], bool]:
+    ) -> tuple[list[Notice], bool, int]:
         """HTML을 파싱하여 Notice 리스트 반환.
 
         Returns:
-            (notices 리스트, cutoff 이전 항목 존재 여부)
+            (notices 리스트, cutoff 이전 항목 존재 여부, 파싱 예외로 건너뛴 행 수)
         """
         soup = BeautifulSoup(html, self.config.parser)
 
@@ -298,16 +341,17 @@ class GenericScraper(BaseCollector):
         if self.config.grid_selector:
             container = soup.select_one(self.config.grid_selector)
             if not container:
-                return ([], False)
+                return ([], False, 0)
             rows = container.select(self.config.list_selector)
         else:
             rows = soup.select(self.config.list_selector)
 
         if not rows:
-            return ([], False)
+            return ([], False, 0)
 
         notices: list[Notice] = []
         has_old = False
+        skipped = 0
 
         for row in rows:
             try:
@@ -363,13 +407,15 @@ class GenericScraper(BaseCollector):
                 notices.append(notice)
 
             except Exception:
+                # 한 행의 이상 때문에 페이지 전체를 버리지 않는다 — 건너뛴 수는 _fetch가 errors로 보고한다
                 logger.debug(
                     f"[{self.source_name}] 행 파싱 스킵",
                     exc_info=True,
                 )
+                skipped += 1
                 continue
 
-        return (notices, has_old)
+        return (notices, has_old, skipped)
 
     def _extract_link(self, title_el: Tag) -> str:
         """제목 요소에서 링크 추출."""

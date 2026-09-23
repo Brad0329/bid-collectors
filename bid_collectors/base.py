@@ -1,14 +1,28 @@
 """수집기 공통 베이스 클래스."""
 
 import os
+import re
 import time
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from urllib.parse import quote
 
 from .models import Notice, CollectResult
 
 logger = logging.getLogger("bid_collectors")
+
+# httpx 예외 문자열에는 쿼리스트링까지 든 전체 URL이 실린다 — 키 파라미터 값을 지운다
+_KEY_PARAM_RE = re.compile(r"((?:serviceKey|ServiceKey|crtfcKey)=)[^&\s'\"]+")
+
+
+def mask_secret(text: str, secret: str | None = None) -> str:
+    """오류 문자열에서 API 키를 가린다(쿼리 파라미터 값 + 원문·URL 인코딩된 키)."""
+    text = _KEY_PARAM_RE.sub(r"\1***", text)
+    if secret:
+        for form in {secret, quote(secret, safe=""), quote(secret)}:
+            text = text.replace(form, "***")
+    return text
 
 
 class BaseCollector(ABC):
@@ -26,12 +40,18 @@ class BaseCollector(ABC):
         """환경변수명. 서브클래스에서 오버라이드 가능."""
         return "DATA_GO_KR_KEY"
 
+    def _mask(self, text: str) -> str:
+        return mask_secret(text, self.api_key)
+
     @abstractmethod
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
+    async def _fetch(
+        self, days: int = 1, **kwargs
+    ) -> tuple[list[Notice], int] | tuple[list[Notice], int, list[str]]:
         """공고 수집 — 서브클래스가 구현.
 
         Returns:
-            (notices 리스트, 처리한 페이지 수)
+            (notices 리스트, 처리한 페이지 수[, 부분 실패·절단 메시지])
+            세 번째 요소가 비어 있지 않으면 collect()가 is_partial=True로 보고한다.
         """
         ...
 
@@ -41,14 +61,19 @@ class BaseCollector(ABC):
         errors: list[str] = []
         notices: list[Notice] = []
         pages_processed = 0
-        is_partial = False
 
         try:
-            notices, pages_processed = await self._fetch(days=days, **kwargs)
+            result = await self._fetch(days=days, **kwargs)
+            notices, pages_processed = result[0], result[1]
+            if len(result) > 2:
+                errors.extend(result[2])
         except Exception as e:
-            logger.error(f"[{self.source_name}] 수집 실패: {e}")
+            logger.error(f"[{self.source_name}] 수집 실패: {self._mask(str(e))}")
             errors.append(str(e))
-            is_partial = True
+
+        # 수집기가 이미 가렸어도 한 번 더 — errors는 소비자 DB까지 간다
+        errors = [self._mask(msg) for msg in errors]
+        is_partial = bool(errors)
 
         duration = time.time() - start
 

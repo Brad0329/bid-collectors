@@ -291,7 +291,7 @@ class TestSmesCollectorFetch:
         )
 
         collector = SmesCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert len(notices) == 1
         assert pages == 1
         assert notices[0].title == "2026년 중소기업 수출지원사업 공고"
@@ -318,7 +318,7 @@ class TestSmesCollectorFetch:
         respx.get(API_URL).mock(side_effect=side_effect)
 
         collector = SmesCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert call_count == 2
         assert len(notices) == 2
         assert pages == 2
@@ -333,27 +333,59 @@ class TestSmesCollectorFetch:
         )
 
         collector = SmesCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
         assert pages == 0
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_http_error_returns_empty(self):
-        """HTTP 에러 → 빈 결과 (break)."""
+        """HTTP 에러 → 빈 결과 + errors에 원인."""
         respx.get(API_URL).mock(
             return_value=httpx.Response(500)
         )
 
         collector = SmesCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
         assert pages == 0
+        assert len(errors) == 1
+        assert "페이지 1 요청 실패" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_second_page_xml_error_keeps_first_page(self):
+        """2페이지 resultCode 에러 → 1페이지 보존 + errors."""
+        page1 = _make_xml_response(SAMPLE_ITEM_XML, total_count=150)
+        err = _make_xml_response(result_code="22", result_msg="LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR.")
+        respx.get(API_URL).mock(side_effect=[httpx.Response(200, content=page1), httpx.Response(200, content=err)])
+
+        result = await SmesCollector(api_key="test-key").collect(days=1)
+        assert len(result.notices) == 1
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "LIMITED_NUMBER" in result.errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_max_pages_truncation_reported(self):
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, content=_make_xml_response(
+                SAMPLE_ITEM_XML.replace("MSS20260401001", f"MSS{i}"), total_count=320))
+            for i in range(3)
+        ])
+        result = await SmesCollector(api_key="test-key").collect(days=1, max_pages=2)
+        assert route.call_count == 2
+        assert len(result.notices) == 2
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "max_pages=2" in result.errors[0]
+        assert "320건" in result.errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_xml_error_response_returns_empty(self):
-        """API XML 에러 응답 → 빈 결과 (break)."""
+        """API XML 에러 응답 → 빈 결과 + errors에 resultCode."""
         error_xml = _make_xml_response(
             result_code="99",
             result_msg="SERVICE_KEY_IS_NOT_REGISTERED_ERROR.",
@@ -364,9 +396,11 @@ class TestSmesCollectorFetch:
         )
 
         collector = SmesCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
         assert pages == 0
+        assert len(errors) == 1
+        assert "99 - SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in errors[0]
 
 
 # ---------------------------------------------------------------------------

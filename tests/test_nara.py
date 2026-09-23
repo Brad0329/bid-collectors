@@ -285,7 +285,7 @@ class TestNaraCollectorFetch:
 
         collector = NaraCollector(api_key="test-key")
         kwargs = {}
-        notices, pages = await collector._fetch(days=1, bid_types=["용역"], **kwargs)
+        notices, pages, errors = await collector._fetch(days=1, bid_types=["용역"], **kwargs)
         assert len(notices) == 1
         assert notices[0].title == "테스트 용역 입찰공고"
 
@@ -315,7 +315,7 @@ class TestNaraCollectorFetch:
         respx.get(f"{BASE_URL}/{operation}").mock(side_effect=side_effect)
 
         collector = NaraCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1, bid_types=["용역"])
+        notices, pages, errors = await collector._fetch(days=1, bid_types=["용역"])
         # 1건/페이지 * 2페이지 (totalCount=150 > ROWS_PER_PAGE=100이므로 페이지 2도 요청)
         assert call_count == 2
         assert len(notices) == 2
@@ -331,7 +331,7 @@ class TestNaraCollectorFetch:
             )
 
         collector = NaraCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1, bid_types=["용역"])
+        notices, pages, errors = await collector._fetch(days=1, bid_types=["용역"])
         assert notices == []
 
     @pytest.mark.asyncio
@@ -352,7 +352,7 @@ class TestNaraCollectorFetch:
 
         collector = NaraCollector(api_key="test-key")
         with patch("bid_collectors.nara.asyncio.sleep", new_callable=AsyncMock):
-            notices, pages = await collector._fetch(days=1, bid_types=["용역"])
+            notices, pages, errors = await collector._fetch(days=1, bid_types=["용역"])
 
         assert call_count == 2
         assert len(notices) == 1
@@ -360,7 +360,7 @@ class TestNaraCollectorFetch:
     @pytest.mark.asyncio
     @respx.mock
     async def test_429_exhausts_retries(self):
-        """429가 MAX_RETRIES까지 반복 → None 반환 (빈 결과)."""
+        """429가 MAX_RETRIES까지 반복 → 빈 결과 + errors에 원인."""
         operation = BID_SERVICES["용역"]
         respx.get(f"{BASE_URL}/{operation}").mock(
             return_value=httpx.Response(429)
@@ -368,9 +368,151 @@ class TestNaraCollectorFetch:
 
         collector = NaraCollector(api_key="test-key")
         with patch("bid_collectors.nara.asyncio.sleep", new_callable=AsyncMock):
-            notices, pages = await collector._fetch(days=1, bid_types=["용역"])
+            notices, pages, errors = await collector._fetch(days=1, bid_types=["용역"])
 
         assert notices == []
+        assert len(errors) == 1
+        assert "429 재시도 3회 소진" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_quota_error_keeps_earlier_services(self):
+        """물품 서비스의 resultCode 에러(쿼터 초과)가 앞서 수집한 용역 결과를 버리지 않는다 (F-001)."""
+        quota = _make_xml_response(
+            result_code="22", result_msg="LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR.", total_count=0
+        )
+        respx.get(f"{BASE_URL}/{BID_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=SAMPLE_RESPONSE)
+        )
+        goods = respx.get(f"{BASE_URL}/{BID_SERVICES['물품']}").mock(
+            return_value=httpx.Response(200, content=quota)
+        )
+
+        result = await NaraCollector(api_key="test-key").collect(days=10, bid_types=["용역", "물품"])
+        assert len(result.notices) == 1
+        assert result.notices[0].bid_no.startswith("용역-")
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "물품" in result.errors[0]
+        assert "22 - LIMITED_NUMBER" in result.errors[0]
+        # 쿼터 에러 뒤 같은 서비스의 남은 기간은 요청하지 않는다 (days=10 → 기간 2개)
+        assert goods.call_count == 1
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_request_failure_masks_key(self):
+        """재시도 소진 오류 메시지에 serviceKey가 새지 않는다."""
+        secret = "Ab+c/D==SECRET"
+        respx.get(f"{BASE_URL}/{BID_SERVICES['용역']}").mock(return_value=httpx.Response(500))
+
+        with patch("bid_collectors.nara.asyncio.sleep", new_callable=AsyncMock):
+            result = await NaraCollector(api_key=secret).collect(days=1, bid_types=["용역"])
+        joined = " ".join(result.errors)
+        assert len(result.errors) == 1
+        assert "SECRET" not in joined
+        assert "serviceKey=***" in joined
+
+
+# ---------------------------------------------------------------------------
+# 나라장터 확장 3메서드 (F-002) — 반환형 list[Notice], 실패는 예외
+# ---------------------------------------------------------------------------
+
+AWARD_ITEM_XML = """\
+<item>
+  <bidNtceNo>R26BK0001</bidNtceNo><bidNtceOrd>000</bidNtceOrd>
+  <bidNtceNm>낙찰 테스트</bidNtceNm><dminsttNm>수요기관</dminsttNm>
+  <fnlSucsfDate>2026-09-01</fnlSucsfDate><sucsfbidAmt>12345000</sucsfbidAmt>
+  <bidwinnrNm>낙찰업체</bidwinnrNm><sucsfbidRate>87.5</sucsfbidRate><prtcptCnum>7</prtcptCnum>
+</item>"""
+
+CONTRACT_ITEM_XML = """\
+<item>
+  <dcsnCntrctNo>C26000111</dcsnCntrctNo><cntrctNm>계약 테스트</cntrctNm>
+  <cntrctInsttNm>계약기관</cntrctInsttNm><thtmCntrctAmt>5000000</thtmCntrctAmt>
+</item>"""
+
+PRESPEC_ITEM_XML = """\
+<item>
+  <bfSpecRgstNo>P26000999</bfSpecRgstNo><prdctClsfcNoNm>사전규격 품명</prdctClsfcNoNm>
+  <orderInsttNm>발주기관</orderInsttNm><opninRgstClseDt>2099-12-31 18:00</opninRgstClseDt>
+  <specDocFileUrl1>https://example.com/s1.pdf</specDocFileUrl1>
+  <specDocFileUrl2>https://example.com/s2.pdf</specDocFileUrl2>
+</item>"""
+
+
+class TestNaraExtended:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_pre_specs_mapping(self):
+        from bid_collectors.nara import PRE_SPEC_BASE_URL, PRE_SPEC_SERVICES
+
+        route = respx.get(f"{PRE_SPEC_BASE_URL}/{PRE_SPEC_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(PRESPEC_ITEM_XML))
+        )
+        notices = await NaraCollector(api_key="test-key").collect_pre_specs(days=1, bid_types=["용역"])
+        assert len(notices) == 1
+        n = notices[0]
+        assert n.bid_no == "사전규격-용역-P26000999"
+        assert str(n.end_date) == "2099-12-31"
+        assert [a["url"] for a in n.attachments] == ["https://example.com/s1.pdf", "https://example.com/s2.pdf"]
+        # 사전규격 API만 ServiceKey(대문자 S)
+        assert "ServiceKey" in route.calls[0].request.url.params
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_awards_mapping(self):
+        from bid_collectors.nara import AWARD_BASE_URL, AWARD_SERVICES
+
+        respx.get(f"{AWARD_BASE_URL}/{AWARD_SERVICES['물품']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(AWARD_ITEM_XML))
+        )
+        notices = await NaraCollector(api_key="test-key").collect_awards(days=1, bid_types=["물품"])
+        assert len(notices) == 1
+        n = notices[0]
+        assert n.bid_no == "낙찰-물품-R26BK0001-000"
+        assert n.status == "closed"
+        assert n.extra["winner_name"] == "낙찰업체"
+        assert n.extra["sucsf_rate"] == "87.5"
+        assert n.extra["participant_count"] == "7"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_contracts_mapping(self):
+        from bid_collectors.nara import CONTRACT_BASE_URL, CONTRACT_SERVICES
+
+        respx.get(f"{CONTRACT_BASE_URL}/{CONTRACT_SERVICES['공사']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(CONTRACT_ITEM_XML))
+        )
+        notices = await NaraCollector(api_key="test-key").collect_contracts(days=1, bid_types=["공사"])
+        assert len(notices) == 1
+        assert notices[0].bid_no == "계약-공사-C26000111"
+        assert notices[0].budget == 5000000
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_api_error_propagates(self):
+        from bid_collectors.nara import PRE_SPEC_BASE_URL, PRE_SPEC_SERVICES
+
+        respx.get(f"{PRE_SPEC_BASE_URL}/{PRE_SPEC_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(result_code="30", result_msg="SERVICE_KEY_IS_NOT_REGISTERED_ERROR."))
+        )
+        with pytest.raises(ValueError, match="30 - SERVICE_KEY_IS_NOT_REGISTERED_ERROR"):
+            await NaraCollector(api_key="test-key").collect_pre_specs(days=1, bid_types=["용역"])
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_request_failure_raises_masked(self):
+        """재시도 소진은 조용한 빈 결과가 아니라 예외 — 메시지에 키가 없다."""
+        from bid_collectors.nara import PRE_SPEC_BASE_URL, PRE_SPEC_SERVICES
+
+        secret = "Ab+c/D==SECRET"
+        respx.get(f"{PRE_SPEC_BASE_URL}/{PRE_SPEC_SERVICES['용역']}").mock(return_value=httpx.Response(500))
+        with patch("bid_collectors.nara.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError) as exc:
+                await NaraCollector(api_key=secret).collect_pre_specs(days=1, bid_types=["용역"])
+        assert "SECRET" not in str(exc.value)
+        assert "ServiceKey=***" in str(exc.value)
+        assert exc.value.__suppress_context__ is True
 
 
 # ---------------------------------------------------------------------------

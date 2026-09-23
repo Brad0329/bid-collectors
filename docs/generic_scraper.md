@@ -466,37 +466,38 @@ class GenericScraper(BaseCollector):
 _fetch(days=30)
 │
 ├── max_pages = kwargs.get("max_pages", config.max_pages)
+│   └── 페이지네이션 없음(GET pagination="" / POST page_param_key="") → max_pages = 1
 ├── delay = kwargs.get("delay", 0.5)
 ├── cutoff = (now - timedelta(days)).replace(hour=0, minute=0, second=0, microsecond=0)
 │
-├── create_client(timeout=15.0, verify=config.verify_ssl)
+├── create_client(timeout=15.0, verify=config.verify_ssl, event_hooks=생성자 인자)  # v1.1
 │   │
 │   ├── [session_init_url이 있으면]
-│   │   └── await client.get(session_init_url)  # 쿠키 획득
+│   │   └── get + raise_for_status, 실패 시 errors에 기록하고 목록 요청은 계속
 │   │
 │   └── for page in range(1, max_pages + 1):
 │       │
 │       ├── try:
 │       │   └── resp = await _fetch_page(client, page)
-│       ├── except httpx.HTTPError:
-│       │   └── logger.warning → break (부분 수집)
+│       ├── except Exception:   # httpx 오류 + 소비자 훅 예외(SSRF 차단)
+│       │   └── errors.append("페이지 N 요청 실패: ...") → break (앞 페이지 보존)
 │       │
 │       ├── [인코딩 처리]
 │       │   ├── config.encoding != "utf-8" → resp.content.decode(encoding)
 │       │   └── "utf-8" → resp.text (httpx 자동 감지)
 │       │
-│       ├── page_notices, has_old = _parse_rows(html, cutoff)
+│       ├── page_notices, has_old, skipped = _parse_rows(html, cutoff)
 │       ├── all_notices.extend(page_notices)
 │       ├── pages_processed += 1
 │       │
-│       ├── [종료 조건]
-│       │   ├── has_old and not page_notices → break (오래된 공고만)
-│       │   └── not page_notices → break (빈 페이지)
+│       ├── [종료 조건] not page_notices → break (빈 페이지 또는 오래된 공고만)
 │       │
 │       └── if page < max_pages:
 │           └── await asyncio.sleep(delay)  # 요청 간격
+│   (for-else) 끝까지 돌았고 마지막 페이지에 cutoff 이전 행이 없었으면 → errors에 max_pages 절단 보고
 │
-└── return (all_notices, pages_processed)
+├── 파싱 예외로 건너뛴 행이 있으면 → errors에 "행 파싱 예외로 N행 건너뜀"
+└── return (all_notices, pages_processed, errors)   # errors가 있으면 collect()가 is_partial=True
 ```
 
 ### 4-4. `_parse_rows` 상세 흐름
@@ -749,12 +750,11 @@ GenericScraper(invalid_config)
 GenericScraper(valid_config).collect(days=7)
   → _fetch() 호출
     → page 1: 성공 → 10건 수집
-    → page 2: 500 에러 → logger.warning, break
-    → return (10건, 1페이지)  # 부분 수집
+    → page 2: 500 에러 → logger.warning, errors 기록, break
+    → return (10건, 1페이지, ["페이지 2 요청 실패: ..."])  # 부분 수집
   → BaseCollector.collect()
-    → CollectResult(notices=10건, is_partial=False, errors=[])
-    # 주의: 페이지 레벨 에러는 _fetch 내부에서 처리되므로
-    # BaseCollector의 try-except에 도달하지 않음
+    → CollectResult(notices=10건, is_partial=True, errors=["페이지 2 요청 실패: ..."])
+    # v1.0.x는 여기서 is_partial=False, errors=[]였다(조용한 실패) — v1.1에서 수정
 
 GenericScraper(valid_config).collect(days=7)
   → _fetch() 호출

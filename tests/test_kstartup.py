@@ -20,12 +20,18 @@ from bid_collectors.kstartup import (
 # Sample data helpers
 # ---------------------------------------------------------------------------
 
+# 픽스처 날짜는 실행 시점 상대값 — 고정 날짜는 cutoff(실행 시점 상대)에 걸려 시간이 지나면 깨진다
+_START_DT = datetime.now() - timedelta(days=2)
+_END_DT = datetime.now() + timedelta(days=25)
+START_RAW, START = _START_DT.strftime("%Y%m%d"), _START_DT.strftime("%Y-%m-%d")
+END_RAW, END = _END_DT.strftime("%Y%m%d"), _END_DT.strftime("%Y-%m-%d")
+
 SAMPLE_ITEM = {
     "pbanc_sn": 12345,
     "biz_pbanc_nm": "테스트 창업지원사업",
     "pbanc_ctnt": "<p>창업 지원 내용</p>",
-    "pbanc_rcpt_bgng_dt": "20260401",
-    "pbanc_rcpt_end_dt": "20260430",
+    "pbanc_rcpt_bgng_dt": START_RAW,
+    "pbanc_rcpt_end_dt": END_RAW,
     "rcrt_prgs_yn": "Y",
     "pbanc_ntrp_nm": "창업진흥원",
     "supt_biz_clsfc": "사업화",
@@ -81,8 +87,8 @@ class TestItemToNotice:
         assert notice.organization == "창업진흥원"
         assert notice.region == "서울"
         assert notice.category == "사업화"
-        assert str(notice.start_date) == "2026-04-01"
-        assert str(notice.end_date) == "2026-04-30"
+        assert str(notice.start_date) == START
+        assert str(notice.end_date) == END
 
     def test_bid_no_format(self):
         """bid_no는 'KSTARTUP-{pbanc_sn}' 형식."""
@@ -172,7 +178,7 @@ class TestItemToNotice:
         item = {
             "pbanc_sn": 99999,
             "biz_pbanc_nm": "최소 공고",
-            "pbanc_rcpt_bgng_dt": "20260401",
+            "pbanc_rcpt_bgng_dt": START_RAW,
         }
         notice = _item_to_notice(item, self._cutoff())
         assert notice is not None
@@ -186,7 +192,7 @@ class TestItemToNotice:
         item = {
             "pbanc_sn": 99999,
             "biz_pbanc_nm": "최소 공고",
-            "pbanc_rcpt_bgng_dt": "20260401",
+            "pbanc_rcpt_bgng_dt": START_RAW,
         }
         notice = _item_to_notice(item, self._cutoff())
         assert notice.extra is None
@@ -260,7 +266,7 @@ class TestKstartupCollectorFetch:
         )
 
         collector = KstartupCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=30)
+        notices, pages, errors = await collector._fetch(days=30)
         assert len(notices) == 1
         assert pages == 1
         assert notices[0].title == "테스트 창업지원사업"
@@ -286,7 +292,7 @@ class TestKstartupCollectorFetch:
         respx.get(API_URL).mock(side_effect=side_effect)
 
         collector = KstartupCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=30)
+        notices, pages, errors = await collector._fetch(days=30)
         assert call_count == 2
         assert pages == 2
         assert len(notices) == 2
@@ -331,7 +337,7 @@ class TestKstartupCollectorFetch:
         )
 
         collector = KstartupCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=30)
+        notices, pages, errors = await collector._fetch(days=30)
         assert notices == []
         assert pages == 0
 
@@ -344,20 +350,51 @@ class TestKstartupCollectorFetch:
         )
 
         collector = KstartupCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=30)
+        notices, pages, errors = await collector._fetch(days=30)
         assert notices == []
         assert pages == 0
+        assert len(errors) == 1
+        assert "페이지 1 요청 실패" in errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_network_error_graceful(self):
-        """네트워크 에러 → 예외 없이 빈 리스트 반환."""
+        """네트워크 에러 → 예외 없이 빈 리스트 + errors에 원인."""
         respx.get(API_URL).mock(side_effect=httpx.ConnectError("connection refused"))
 
         collector = KstartupCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=30)
+        notices, pages, errors = await collector._fetch(days=30)
         assert notices == []
         assert pages == 0
+        assert len(errors) == 1
+        assert "ConnectError" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_max_pages_truncation_reported(self):
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_make_api_response(
+                [{**SAMPLE_ITEM, "pbanc_sn": i}], total_count=250))
+            for i in range(3)
+        ])
+        result = await KstartupCollector(api_key="test-key").collect(days=30, max_pages=2)
+        assert route.call_count == 2
+        assert len(result.notices) == 2
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "max_pages=2" in result.errors[0]
+        assert "250건" in result.errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_api_key_masked_in_errors(self):
+        secret = "Ab+c/D==SECRET"
+        respx.get(API_URL).mock(return_value=httpx.Response(500))
+        result = await KstartupCollector(api_key=secret).collect(days=30)
+        joined = " ".join(result.errors)
+        assert result.errors
+        assert "SECRET" not in joined
+        assert "serviceKey=***" in joined
 
 
 # ---------------------------------------------------------------------------

@@ -320,16 +320,20 @@ class NaraCollector(BaseCollector):
 
     source_name = "나라장터"
 
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
         bid_types = kwargs.get("bid_types", list(BID_SERVICES.keys()))
         date_ranges = _split_date_range(days)
         notices: list[Notice] = []
+        errors: list[str] = []
         pages_processed = 0
 
         async with create_client(timeout=30.0) as client:
             for bid_type in bid_types:
                 operation = BID_SERVICES[bid_type]
+                api_error = False
                 for start_dt, end_dt in date_ranges:
+                    if api_error:
+                        break
                     page = 1
                     while True:
                         params = {
@@ -342,13 +346,25 @@ class NaraCollector(BaseCollector):
                             "type": "xml",
                         }
 
-                        resp = await self._request_with_retry(
-                            client, operation, params, bid_type
-                        )
-                        if resp is None:
+                        where = f"{bid_type} {start_dt[:8]}~{end_dt[:8]} 페이지 {page}"
+                        try:
+                            resp = await self._request_with_retry(
+                                client, operation, params, bid_type
+                            )
+                        except RuntimeError as e:
+                            # 네트워크·HTTP 실패는 이 기간만 포기하고 다음 기간은 시도한다
+                            errors.append(f"{where}: {e}")
                             break
-
-                        items, total = _parse_xml_items(resp.content)
+                        try:
+                            items, total = _parse_xml_items(resp.content)
+                        except (ValueError, etree.XMLSyntaxError) as e:
+                            # resultCode 에러(쿼터 초과 등)는 같은 서비스의 남은 기간도 실패한다 — 서비스 단위로 중단,
+                            # 앞서 모은 다른 서비스 결과는 보존한다
+                            msg = self._mask(f"{where}: {e} — {bid_type} 남은 기간 중단")
+                            logger.error(f"[나라장터] {msg}")
+                            errors.append(msg)
+                            api_error = True
+                            break
                         pages_processed += 1
 
                         for item in items:
@@ -363,10 +379,15 @@ class NaraCollector(BaseCollector):
                             break
                         page += 1
 
-        return notices, pages_processed
+        return notices, pages_processed, errors
 
     async def _request_with_retry(self, client, operation, params, bid_type, base_url=None):
-        """429 에러 재시도 포함 API 요청."""
+        """429 에러 재시도 포함 API 요청.
+
+        Raises:
+            RuntimeError: 재시도 소진. 메시지의 API 키는 가려져 있다
+                (원래 예외는 키가 든 URL을 담고 있어 연결하지 않는다).
+        """
         url = f"{base_url or BASE_URL}/{operation}"
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -381,12 +402,14 @@ class NaraCollector(BaseCollector):
                 resp.raise_for_status()
                 return resp
             except Exception as e:
+                reason = self._mask(f"{type(e).__name__}: {e}")
                 if attempt == MAX_RETRIES:
-                    logger.error(f"[나라장터-{bid_type}] 요청 실패 ({attempt}회): {e}")
-                    return None
-                logger.warning(f"[나라장터-{bid_type}] 요청 실패, 재시도: {e}")
+                    logger.error(f"[나라장터-{bid_type}] 요청 실패 ({attempt}회): {reason}")
+                    raise RuntimeError(f"요청 실패 ({attempt}회): {reason}") from None
+                logger.warning(f"[나라장터-{bid_type}] 요청 실패, 재시도: {reason}")
                 await asyncio.sleep(5)
-        return None
+        logger.error(f"[나라장터-{bid_type}] 429 재시도 {MAX_RETRIES}회 소진")
+        raise RuntimeError(f"429 재시도 {MAX_RETRIES}회 소진")
 
     async def fetch_detail(self, bid_no: str) -> dict | None:
         """단일 공고 상세 조회.
@@ -478,12 +501,11 @@ class NaraCollector(BaseCollector):
                             "type": "xml",
                         }
 
+                        # 실패는 예외로 호출자에게 간다(반환형 list[Notice]라 errors를 담을 곳이 없다 — CONTRACT.md)
                         resp = await self._request_with_retry(
                             client, operation, params, f"{label}-{bid_type}",
                             base_url=base_url,
                         )
-                        if resp is None:
-                            break
 
                         items, total = _parse_xml_items(resp.content)
 
@@ -534,4 +556,4 @@ class NaraCollector(BaseCollector):
                 return {"status": "ok", "source": self.source_name, "response_time_ms": ms}
         except Exception as e:
             ms = int((time.time() - start) * 1000)
-            return {"status": "error", "source": self.source_name, "message": str(e), "response_time_ms": ms}
+            return {"status": "error", "source": self.source_name, "message": self._mask(str(e)), "response_time_ms": ms}

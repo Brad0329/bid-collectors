@@ -23,6 +23,11 @@ from bid_collectors.bizinfo import (
 # Sample data helpers
 # ---------------------------------------------------------------------------
 
+# 픽스처 날짜는 실행 시점 상대값 — 고정 날짜는 cutoff(실행 시점 상대)에 걸려 시간이 지나면 깨진다
+START = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+END = (datetime.now() + timedelta(days=25)).strftime("%Y-%m-%d")
+CREATED = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 10:00:00")
+
 SAMPLE_ITEM = {
     "pblancId": "PBLN_000000000120389",
     "pblancNm": "[경기] 테스트 지원사업 공고",
@@ -30,7 +35,7 @@ SAMPLE_ITEM = {
     "excInsttNm": "테스트진흥원",
     "jrsdInsttNm": "경기도",
     "trgetNm": "중소기업",
-    "reqstBeginEndDe": "2026-04-01 ~ 2026-04-30",
+    "reqstBeginEndDe": f"{START} ~ {END}",
     "bsnsSumryCn": "<p>테스트 사업 내용입니다</p>",
     "pldirSportRealmLclasCodeNm": "수출",
     "pldirSportRealmMlsfcCodeNm": "수출정보제공",
@@ -38,8 +43,8 @@ SAMPLE_ITEM = {
     "refrncNm": "담당자 070-1234-5678",
     "reqstMthPapersCn": "이메일 접수",
     "inqireCo": 100,
-    "creatPnttm": "2026-04-05 10:00:00",
-    "updtPnttm": "2026-04-05 10:00:00",
+    "creatPnttm": CREATED,
+    "updtPnttm": CREATED,
     "totCnt": 1,
     "printFileNm": "공고문.hwp",
     "printFlpthNm": "https://www.bizinfo.go.kr/cmm/fms/getImageFile.do?atchFileId=FILE1",
@@ -189,9 +194,9 @@ class TestItemToNotice:
         """reqstBeginEndDe 기간 형식 파싱 (시작일 ~ 종료일)."""
         notice = _item_to_notice(SAMPLE_ITEM, self._cutoff())
         assert notice.start_date is not None
-        assert str(notice.start_date) == "2026-04-01"
+        assert str(notice.start_date) == START
         assert notice.end_date is not None
-        assert str(notice.end_date) == "2026-04-30"
+        assert str(notice.end_date) == END
 
     def test_attachments_included(self):
         """첨부파일이 Notice에 포함."""
@@ -292,7 +297,7 @@ class TestBizinfoCollectorFetch:
 
         collector = BizinfoCollector(api_key="test-key")
         kwargs = {}
-        notices, pages = await collector._fetch(days=7, **kwargs)
+        notices, pages, errors = await collector._fetch(days=7, **kwargs)
         assert len(notices) == 1
         assert notices[0].title == "[경기] 테스트 지원사업 공고"
         assert notices[0].bid_no == "BIZINFO-PBLN_000000000120389"
@@ -322,7 +327,7 @@ class TestBizinfoCollectorFetch:
         respx.get(API_URL).mock(side_effect=side_effect)
 
         collector = BizinfoCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=7)
+        notices, pages, errors = await collector._fetch(days=7)
         assert call_count == 2
         assert len(notices) == 2
 
@@ -335,7 +340,7 @@ class TestBizinfoCollectorFetch:
         )
 
         collector = BizinfoCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
 
     @pytest.mark.asyncio
@@ -347,7 +352,7 @@ class TestBizinfoCollectorFetch:
         )
 
         collector = BizinfoCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
 
     @pytest.mark.asyncio
@@ -359,18 +364,65 @@ class TestBizinfoCollectorFetch:
         )
 
         collector = BizinfoCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
+        assert len(errors) == 1
+        assert "페이지 1 요청 실패" in errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_network_error_graceful(self):
-        """네트워크 에러 → 예외 없이 빈 리스트 반환."""
+        """네트워크 에러 → 예외 없이 빈 리스트 + errors에 원인."""
         respx.get(API_URL).mock(side_effect=httpx.ConnectError("connection refused"))
 
         collector = BizinfoCollector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
+        assert len(errors) == 1
+        assert "ConnectError" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_second_page_failure_keeps_first_page(self):
+        """2페이지 실패 → 1페이지 결과 보존 + is_partial."""
+        page1 = {"jsonArray": [{**SAMPLE_ITEM, "totCnt": 150}]}
+        respx.get(API_URL).mock(side_effect=[httpx.Response(200, json=page1), httpx.Response(500)])
+
+        result = await BizinfoCollector(api_key="test-key").collect(days=7)
+        assert len(result.notices) == 1
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "페이지 2 요청 실패" in result.errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_max_pages_truncation_reported(self):
+        """max_pages 상한에서 멈추면 잘렸다는 사실과 전체 건수를 알린다."""
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json={"jsonArray": [{**SAMPLE_ITEM, "pblancId": f"P{i}", "totCnt": 350}]})
+            for i in range(3)
+        ])
+
+        result = await BizinfoCollector(api_key="test-key").collect(days=7, max_pages=2)
+        assert route.call_count == 2
+        assert len(result.notices) == 2
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "max_pages=2" in result.errors[0]
+        assert "350건" in result.errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_api_key_masked_in_errors(self):
+        """httpx 예외 문자열의 URL에 든 키가 errors로 새지 않는다(원문·URL 인코딩 모두)."""
+        secret = "Ab+c/D==SECRET"
+        respx.get(API_URL).mock(return_value=httpx.Response(500))
+
+        result = await BizinfoCollector(api_key=secret).collect(days=1)
+        assert len(result.errors) == 1
+        joined = " ".join(result.errors)
+        assert "SECRET" not in joined
+        assert "crtfcKey=***" in joined
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,9 @@ from bid_collectors.subsidy24 import (
 # Sample data helpers
 # ---------------------------------------------------------------------------
 
+# 픽스처 날짜는 실행 시점 상대값 — 고정 마감일은 시간이 지나면 closed가 되어 깨진다
+DEADLINE = (datetime.now() + timedelta(days=25)).strftime("%Y-%m-%d")
+
 SAMPLE_ITEM = {
     "서비스ID": "SVC000001",
     "서비스명": "중소기업 수출 지원사업",
@@ -30,7 +33,7 @@ SAMPLE_ITEM = {
     "선정기준": "매출액 기준",
     "지원내용": "<p>수출 컨설팅 및 지원금 제공</p>",
     "신청방법": "온라인 신청",
-    "신청기한": "2026-04-30",
+    "신청기한": DEADLINE,
     "상세조회URL": "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/SVC000001",
     "소관기관코드": "1234567",
     "소관기관명": "중소벤처기업부",
@@ -142,7 +145,7 @@ class TestItemToNotice:
         """신청기한에서 end_date 파싱."""
         notice = _item_to_notice(SAMPLE_ITEM)
         assert notice.end_date is not None
-        assert str(notice.end_date) == "2026-04-30"
+        assert str(notice.end_date) == DEADLINE
 
     def test_end_date_empty_deadline(self):
         """신청기한이 비어있으면 end_date None."""
@@ -163,7 +166,7 @@ class TestItemToNotice:
         assert notice.extra["target"] == "중소기업, 소상공인"
         assert notice.extra["selection_criteria"] == "매출액 기준"
         assert notice.extra["apply_method"] == "온라인 신청"
-        assert notice.extra["deadline_raw"] == "2026-04-30"
+        assert notice.extra["deadline_raw"] == DEADLINE
         assert notice.extra["department"] == "수출지원과"
         assert notice.extra["agency_type"] == "중앙행정기관"
         assert notice.extra["user_type"] == "기업"
@@ -287,7 +290,7 @@ class TestSubsidy24CollectorFetch:
 
         collector = Subsidy24Collector(api_key="test-key")
         kwargs = {}
-        notices, pages = await collector._fetch(days=7, **kwargs)
+        notices, pages, errors = await collector._fetch(days=7, **kwargs)
         assert len(notices) == 1
         assert notices[0].title == "중소기업 수출 지원사업"
         assert notices[0].bid_no == "GOV24-SVC000001"
@@ -315,7 +318,7 @@ class TestSubsidy24CollectorFetch:
         respx.get(API_URL).mock(side_effect=side_effect)
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=7)
+        notices, pages, errors = await collector._fetch(days=7)
         assert call_count == 2
         assert len(notices) == 2
 
@@ -329,8 +332,37 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
+        assert len(errors) == 1
+        assert "API 에러: -1 - SERVICE_KEY_ERROR" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_cutoff_truncated_to_midnight(self):
+        """cond[수정일시::GTE]는 cutoff 날짜의 00:00:00, API 값과 같은 YYYYMMDDHHMMSS 형식."""
+        route = respx.get(API_URL).mock(
+            return_value=httpx.Response(200, json=_make_api_response([], match_count=0))
+        )
+        await Subsidy24Collector(api_key="test-key")._fetch(days=3)
+        expected = (datetime.now() - timedelta(days=3)).strftime("%Y%m%d") + "000000"
+        assert route.calls[0].request.url.params["cond[수정일시::GTE]"] == expected
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_max_pages_truncation_reported(self):
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_make_api_response(
+                [{**SAMPLE_ITEM, "서비스ID": f"SVC{i}"}], match_count=500))
+            for i in range(3)
+        ])
+        result = await Subsidy24Collector(api_key="test-key").collect(days=7, max_pages=2)
+        assert route.call_count == 2
+        assert len(result.notices) == 2
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "max_pages=2" in result.errors[0]
+        assert "500건" in result.errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
@@ -351,7 +383,7 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=7, only_business=True)
+        notices, pages, errors = await collector._fetch(days=7, only_business=True)
         assert len(notices) == 1
         assert notices[0].bid_no == "GOV24-SVC000001"
 
@@ -374,7 +406,7 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=7)
+        notices, pages, errors = await collector._fetch(days=7)
         assert len(notices) == 2
 
     @pytest.mark.asyncio
@@ -387,7 +419,7 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
 
     @pytest.mark.asyncio
@@ -399,18 +431,22 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
+        assert len(errors) == 1
+        assert "페이지 1 요청 실패" in errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_network_error_graceful(self):
-        """네트워크 에러 → 예외 없이 빈 리스트."""
+        """네트워크 에러 → 예외 없이 빈 리스트 + errors에 원인."""
         respx.get(API_URL).mock(side_effect=httpx.ConnectError("connection refused"))
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=1)
+        notices, pages, errors = await collector._fetch(days=1)
         assert notices == []
+        assert len(errors) == 1
+        assert "ConnectError" in errors[0]
 
     @pytest.mark.asyncio
     @respx.mock
@@ -424,7 +460,7 @@ class TestSubsidy24CollectorFetch:
         )
 
         collector = Subsidy24Collector(api_key="test-key")
-        notices, pages = await collector._fetch(days=7)
+        notices, pages, errors = await collector._fetch(days=7)
         assert len(notices) == 1
 
 

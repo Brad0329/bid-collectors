@@ -298,7 +298,7 @@ class TestParseRows:
             _make_row("공고1", today) + _make_row("공고2", today)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, has_old = scraper._parse_rows(html, cutoff)
+        notices, has_old, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 2
         assert notices[0].title == "공고1"
         assert notices[1].title == "공고2"
@@ -320,7 +320,7 @@ class TestParseRows:
             '</body></html>'
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "제목A"
 
@@ -334,7 +334,7 @@ class TestParseRows:
             _make_row("오래된공고", old_date) + _make_row("최근공고", recent_date)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, has_old = scraper._parse_rows(html, cutoff)
+        notices, has_old, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "최근공고"
         assert has_old is True
@@ -345,7 +345,7 @@ class TestParseRows:
         scraper = self._get_scraper(skip_no_date=True, link_base="https://example.com")
         html = _make_html(_make_row("날짜없음", ""))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 0
 
     def test_skip_no_date_false(self):
@@ -354,7 +354,7 @@ class TestParseRows:
         scraper = self._get_scraper(skip_no_date=False, link_base="https://example.com")
         html = _make_html(_make_row("날짜없음", ""))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "날짜없음"
 
@@ -368,7 +368,7 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("그리드공고", today), grid_id="gridData")
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
 
     def test_grid_selector_not_found(self):
@@ -377,7 +377,7 @@ class TestParseRows:
         scraper = self._get_scraper(grid_selector="#missing")
         html = _make_html(_make_row("공고", "2026-04-10"))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 0
 
     def test_no_title_skipped(self):
@@ -386,7 +386,7 @@ class TestParseRows:
         scraper = self._get_scraper(link_base="https://example.com")
         html = _make_html("<tr><td>1</td><td></td><td>2026-04-10</td></tr>")
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 0
 
     def test_bid_no_format(self):
@@ -396,7 +396,7 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("테스트공고", today))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert notices[0].bid_no.startswith("SCR-testsite-")
         assert len(notices[0].bid_no.split("-")) == 3
 
@@ -411,7 +411,7 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("매핑테스트", today, "/detail/99"))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         n = notices[0]
         assert n.source == "커스텀기관"
         assert n.organization == "커스텀기관"
@@ -429,7 +429,7 @@ class TestParseRows:
             _make_row("정상공고", today) + _make_row("정상공고2", today)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _ = scraper._parse_rows(html, cutoff)
+        notices, _, _ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 2
 
 
@@ -533,7 +533,7 @@ class TestFetchIntegration:
         scraper = GenericScraper({
             **MINIMAL_CONFIG, "link_base": "https://example.com", "max_pages": 1,
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 2
         assert pages == 1
 
@@ -557,7 +557,7 @@ class TestFetchIntegration:
             "max_pages": 5,
             "link_base": "https://example.com",
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 2
         assert pages == 3
 
@@ -576,7 +576,7 @@ class TestFetchIntegration:
             "max_pages": 1,
             "link_base": "https://example.com",
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 1
 
     @respx.mock
@@ -594,7 +594,7 @@ class TestFetchIntegration:
             "max_pages": 1,
             "link_base": "https://example.com",
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert init_route.called
         assert len(notices) == 1
 
@@ -612,7 +612,7 @@ class TestFetchIntegration:
             "max_pages": 3,
             "link_base": "https://example.com",
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 0
         assert pages == 1  # 1페이지만 처리 후 종료
 
@@ -633,9 +633,11 @@ class TestFetchIntegration:
             "max_pages": 5,
             "link_base": "https://example.com",
         })
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 1
         assert pages == 1  # 2페이지에서 에러, 1페이지만 카운트
+        assert len(errors) == 1
+        assert "페이지 2 요청 실패" in errors[0]
 
     @respx.mock
     async def test_empty_page(self):
@@ -643,7 +645,7 @@ class TestFetchIntegration:
         respx.get(MINIMAL_CONFIG["list_url"]).respond(200, text=html)
 
         scraper = GenericScraper({**MINIMAL_CONFIG, "link_base": "https://example.com"})
-        notices, pages = await scraper._fetch(days=30, delay=0)
+        notices, pages, errors = await scraper._fetch(days=30, delay=0)
         assert len(notices) == 0
         assert pages == 1
 
@@ -723,3 +725,175 @@ class TestCollectIntegration:
         result = await scraper.collect(days=30, delay=0)
         assert result.total_fetched == 2
         assert result.total_after_dedup == 1
+
+
+# ─────────────────────────────────────────────
+# v1.1 신뢰성 — 실패·절단 보고, 요청 검사 훅 (F-007)
+# ─────────────────────────────────────────────
+
+
+def _today() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+PAGED_CONFIG = {
+    **MINIMAL_CONFIG,
+    "pagination": "&page={page}",
+    "link_base": "https://example.com",
+}
+
+
+class TestFailureAndTruncationReport:
+    @respx.mock
+    async def test_first_page_failure_reports_error(self):
+        """1페이지 실패 → 0건 + errors에 원인 + is_partial (장애와 '공고 없음'을 구분)."""
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(503)
+        result = await GenericScraper(PAGED_CONFIG).collect(days=30, delay=0)
+        assert len(result.notices) == 0
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "페이지 1 요청 실패" in result.errors[0]
+        assert "503" in result.errors[0]
+
+    @respx.mock
+    async def test_max_pages_truncation_reported(self):
+        """max_pages까지 전부 cutoff 이내 공고면 잘렸다고 알린다."""
+        base = MINIMAL_CONFIG["list_url"]
+        respx.get(base).respond(200, text=_make_html(_make_row("공고1", _today(), "/d/1")))
+        respx.get(f"{base}&page=2").respond(200, text=_make_html(_make_row("공고2", _today(), "/d/2")))
+        page3 = respx.get(f"{base}&page=3").respond(200, text=_make_html(_make_row("공고3", _today(), "/d/3")))
+
+        result = await GenericScraper({**PAGED_CONFIG, "max_pages": 2}).collect(days=30, delay=0)
+        assert len(result.notices) == 2
+        assert not page3.called
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "max_pages=2" in result.errors[0]
+        assert "2건" in result.errors[0]
+
+    @respx.mock
+    async def test_no_truncation_when_cutoff_reached(self):
+        """마지막 페이지에서 cutoff 이전 행을 만났으면 절단이 아니다."""
+        from datetime import datetime, timedelta
+
+        old = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        base = MINIMAL_CONFIG["list_url"]
+        respx.get(base).respond(200, text=_make_html(_make_row("공고1", _today(), "/d/1")))
+        respx.get(f"{base}&page=2").respond(
+            200, text=_make_html(_make_row("공고2", _today(), "/d/2") + _make_row("옛공고", old, "/d/9"))
+        )
+        result = await GenericScraper({**PAGED_CONFIG, "max_pages": 2}).collect(days=30, delay=0)
+        assert len(result.notices) == 2
+        assert result.errors == []
+        assert result.is_partial is False
+
+    @respx.mock
+    async def test_no_pagination_fetches_single_page(self):
+        """pagination이 없으면 같은 URL을 max_pages번 다시 받지 않고, 절단도 아니다."""
+        route = respx.get(MINIMAL_CONFIG["list_url"]).respond(
+            200, text=_make_html(_make_row("공고", _today(), "/d/1"))
+        )
+        result = await GenericScraper(
+            {**MINIMAL_CONFIG, "link_base": "https://example.com", "max_pages": 3}
+        ).collect(days=30, delay=0)
+        assert route.call_count == 1
+        assert len(result.notices) == 1
+        assert result.errors == []
+
+    @respx.mock
+    async def test_session_init_failure_reported(self):
+        respx.get("https://example.com/init").respond(500)
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(
+            200, text=_make_html(_make_row("공고", _today(), "/d/1"))
+        )
+        result = await GenericScraper({
+            **MINIMAL_CONFIG, "link_base": "https://example.com",
+            "session_init_url": "https://example.com/init",
+        }).collect(days=30, delay=0)
+        assert len(result.notices) == 1
+        assert len(result.errors) == 1
+        assert "세션 초기화" in result.errors[0]
+
+    @respx.mock
+    async def test_row_parse_exception_counted(self, monkeypatch):
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(
+            200,
+            text=_make_html(_make_row("정상", _today(), "/d/1") + _make_row("고장", _today(), "/d/2")),
+        )
+        scraper = GenericScraper({**MINIMAL_CONFIG, "link_base": "https://example.com"})
+        original = scraper._extract_link
+
+        def flaky(title_el):
+            if title_el.get_text(strip=True) == "고장":
+                raise RuntimeError("boom")
+            return original(title_el)
+
+        monkeypatch.setattr(scraper, "_extract_link", flaky)
+        result = await scraper.collect(days=30, delay=0)
+        assert len(result.notices) == 1
+        assert result.errors == ["행 파싱 예외로 1행 건너뜀"]
+
+
+class TestEventHooks:
+    @respx.mock
+    async def test_hook_sees_session_init_pages_and_redirects(self):
+        seen: list[str] = []
+
+        async def record(request: httpx.Request) -> None:
+            seen.append(str(request.url))
+
+        base = MINIMAL_CONFIG["list_url"]
+        respx.get("https://example.com/init").respond(200, text="OK")
+        respx.get(base).respond(302, headers={"Location": "https://example.com/moved"})
+        respx.get("https://example.com/moved").respond(
+            200, text=_make_html(_make_row("공고", _today(), "/d/1"))
+        )
+        respx.get(f"{base}&page=2").respond(200, text=_make_html(""))
+
+        scraper = GenericScraper(
+            {**PAGED_CONFIG, "session_init_url": "https://example.com/init"},
+            event_hooks={"request": [record]},
+        )
+        result = await scraper.collect(days=30, delay=0)
+        assert len(result.notices) == 1
+        assert seen == [
+            "https://example.com/init",
+            base,
+            "https://example.com/moved",
+            f"{base}&page=2",
+        ]
+
+    @respx.mock
+    async def test_hook_rejection_reported_as_error(self):
+        class UnsafeUrlError(ValueError):
+            pass
+
+        async def guard(request: httpx.Request) -> None:
+            if request.url.host == "internal.local":
+                raise UnsafeUrlError(f"차단: {request.url.host}")
+
+        base = MINIMAL_CONFIG["list_url"]
+        respx.get(base).respond(302, headers={"Location": "http://internal.local/admin"})
+        internal = respx.get("http://internal.local/admin").respond(200, text="secret")
+
+        result = await GenericScraper(PAGED_CONFIG, event_hooks={"request": [guard]}).collect(
+            days=30, delay=0
+        )
+        assert not internal.called
+        assert len(result.notices) == 0
+        assert result.is_partial is True
+        assert "UnsafeUrlError" in result.errors[0]
+
+    @respx.mock
+    async def test_health_check_uses_hook(self):
+        seen: list[str] = []
+
+        async def record(request: httpx.Request) -> None:
+            seen.append(str(request.url))
+
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(200, text="<html></html>")
+        result = await GenericScraper(MINIMAL_CONFIG, event_hooks={"request": [record]}).health_check()
+        assert result["status"] == "ok"
+        assert seen == [MINIMAL_CONFIG["list_url"]]

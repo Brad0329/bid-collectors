@@ -92,16 +92,16 @@ class BaseCollector(ABC):
         return "DATA_GO_KR_KEY"  # 대부분의 공공 API 기본값
 
     @abstractmethod
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list["Notice"], int]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list["Notice"], int] | tuple[list["Notice"], int, list[str]]:
         """
-        공고 수집 — 서브클래스가 구현.
+        공고 수집 — 서브클래스가 구현 (패키지 내부 계약 — BidWatch는 부르지 않는다).
 
         Args:
             days: 최근 N일간 공고 수집 (기본 1일)
             **kwargs: 수집기별 추가 옵션
 
         Returns:
-            (notices 리스트, 처리한 페이지 수)
+            (notices 리스트, 처리한 페이지 수[, 부분 실패·절단 메시지])  — v1.1부터 3번째 요소
         """
         ...
 
@@ -113,15 +113,28 @@ class BaseCollector(ABC):
         """
         ...
 
+    async def fetch_detail(self, bid_no: str) -> dict | None:
+        """
+        공고 1건 상세 조회. K-Startup만 구현(content 전문 + 대상·신청방법 등), 나머지는 None.
+        결과 캐싱은 소비자 몫.
+        """
+        ...
+
     async def health_check(self) -> dict:
         """
-        API 연결 상태 확인.
+        API 연결 상태 확인. 예외를 던지지 않는다.
 
         Returns:
-            {"status": "ok"|"error", "message": str, "response_time_ms": int}
+            {"status": "ok"|"error", "source": str, "message": str(오류 시, API 키는 가려짐), "response_time_ms": int}
         """
         ...
 ```
+
+### 나라장터 확장 메서드 (`NaraCollector`)
+
+`collect_awards` · `collect_contracts` · `collect_pre_specs(days, **kwargs) -> list[Notice]` — `CollectResult`가 아니다.
+실패(API 에러 응답·재시도 소진)는 **예외로** 호출자에게 간다(v1.1부터 재시도 소진도 조용한 빈 결과 대신 `RuntimeError`, 메시지의 API 키는 가려짐).
+bid_no 접두사 `낙찰-`·`계약-`·`사전규격-`.
 
 ### 호출 방식: **async**
 
@@ -162,9 +175,25 @@ class CollectResult(BaseModel):
     pages_processed: int         # 처리한 페이지 수
 
     # === 에러 ===
-    errors: list[str]            # 수집 중 발생한 에러 메시��� (빈 리스트면 성공)
-    is_partial: bool = False     # True면 일부만 수집됨 (중간 실패)
+    errors: list[str] = []       # 수집 중 발생한 에러·절단 메시지 (빈 리스트면 완전 성공)
+    is_partial: bool = False     # True면 일부만 수집됨 — errors가 비어 있지 않으면 항상 True
 ```
+
+### `errors` / `is_partial`의 의미 (v1.1.0부터 채워짐)
+
+| 상황 | notices | errors | is_partial |
+|---|---|---|---|
+| 정상 완료 | 전부 | `[]` | False |
+| 공고가 0건 (정상) | `[]` | `[]` | False |
+| 1페이지부터 요청 실패 (사이트 장애) | `[]` | `["페이지 1 요청 실패: ..."]` | True |
+| N페이지에서 실패 | 앞 페이지까지 보존 | 실패 원인 | True |
+| 나라장터 한 서비스의 resultCode 에러(쿼터 초과 등) | 다른 서비스 결과 보존 | `"물품 ... 22 - LIMITED_NUMBER... — 물품 남은 기간 중단"` | True |
+| `max_pages` 상한에서 멈춤 | 상한까지 | `"max_pages=N 상한 도달로 중단 — 전체 M건 중 ..."` (GenericScraper는 전체 건수를 모름) | True |
+| GenericScraper 세션 초기화 실패·행 파싱 예외 | 수집된 것 | 원인 / `"행 파싱 예외로 N행 건너뜀"` | True |
+
+- **"사이트 장애"와 "공고 없음"은 errors로 구분한다** — v1.0.x에서는 둘 다 `[]`/False였다.
+- errors 문자열에서 API 키(`serviceKey`·`ServiceKey`·`crtfcKey` 값, 키 원문·URL 인코딩 형태)는 `***`로 가려진다 — 수집 이력 DB에 그대로 저장해도 된다.
+- 메시지 문구는 계약이 아니다(사람이 읽는 용도). 분기는 `is_partial`·`len(errors)`로 한다.
 
 ### BidWatch가 CollectResult를 사용하는 방식
 
@@ -195,31 +224,47 @@ save_collection_log(
 class GenericScraper(BaseCollector):
     source_name = "scraper"  # config의 name으로 오버라이드
 
-    def __init__(self, config: dict, **kwargs):
+    def __init__(
+        self,
+        config: ScraperConfig | dict,
+        event_hooks: dict[str, list[Callable]] | None = None,   # v1.1.0 추가
+        **kwargs,
+    ):
         """
-        API 키 불필요. config(scraper_config JSON)만 받음.
+        API 키 불필요.
 
         Args:
-            config: scraper_registry.scraper_config에서 가져온 JSON dict
-                    스키마: dev_reference.md §6 참조
+            config: ScraperConfig 또는 dict — dict는 생성 즉시 ScraperConfig로 검증된다
+                    (실패 시 pydantic.ValidationError). 스키마: `ScraperConfig.model_json_schema()`,
+                    설명: docs/generic_scraper.md
+            event_hooks: httpx event_hooks 형식 ({"request": [...], "response": [...]}).
+                    session_init_url·목록 페이지·health_check·리다이렉트로 따라가는 요청 **전부**에 걸린다.
+                    SSRF 방어 훅을 꽂는 자리 — 훅이 예외를 던지면 그 요청은 실패로 errors에 기록되고
+                    (1페이지면 0건 + is_partial) 차단된 URL로는 요청이 나가지 않는다.
         """
-        self.config = config
-        self.source_name = config.get("name", "scraper")
 
     async def collect(self, days: int = 30, **kwargs) -> CollectResult:
-        """config 기반으로 HTML 게시판 스크래핑."""
+        """config 기반으로 HTML 게시판 스크래핑. kwargs: max_pages(config 오버라이드), delay(페이지 간격 초)."""
         ...
 ```
+
+- `ScraperConfig`는 공개 export다(`from bid_collectors import ScraperConfig`). BidWatch의 AI가 이 스키마대로 config를 만든다.
+- `pagination`이 비어 있으면(POST는 `page_param_key`가 없으면) 1페이지만 요청한다 — v1.0.x는 같은 URL을 `max_pages`번 다시 받았다.
 
 ### BidWatch에서 호출
 
 ```python
 from bid_collectors import GenericScraper
+from app.services.url_guard import guard_request
 
-# scraper_registry에서 config 로드
-scraper = GenericScraper(config=registry.scraper_config)
+scraper = GenericScraper(
+    config=registry.scraper_config,
+    event_hooks={"request": [guard_request]},   # 정기·시험 수집 모두 SSRF 방어
+)
 result = await scraper.collect(days=30)
 ```
+
+`create_client(**kwargs)`(`bid_collectors.utils.http`)도 `event_hooks`를 httpx에 그대로 넘긴다.
 
 ---
 
@@ -231,19 +276,16 @@ result = await scraper.collect(days=30)
 | `BizinfoCollector` | `BIZINFO_API_KEY` | 기업마당 (별도 키) |
 | `Subsidy24Collector` | `DATA_GO_KR_KEY` | 보조금24 |
 | `KstartupCollector` | `DATA_GO_KR_KEY` | K-Startup |
-| `LHCollector` | `DATA_GO_KR_KEY` | LH |
-| `KepcoCollector` | `DATA_GO_KR_KEY` | 한국전력 |
-| `KexpresswayCollector` | `DATA_GO_KR_KEY` | 도로공사 |
-| `KwaterCollector` | `DATA_GO_KR_KEY` | 수자원공사 |
-| `DefenseCollector` | `DATA_GO_KR_KEY` | 방위사업청 |
-| `Smes24Collector` | `DATA_GO_KR_KEY` | 중소벤처24 |
+| `SmesCollector` | `DATA_GO_KR_KEY` | 중소벤처기업부 |
 | `GenericScraper` | (없음) | config만 필요 |
+
+(공기업 API 5종·중소벤처24는 미구현 — bid-collectors `work_log/plan.md` '이후 단계')
 
 ---
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.x` 기준
+- 이 인터페이스는 bid-collectors `v1.1.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

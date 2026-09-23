@@ -47,6 +47,17 @@ def _ssl_context(client: httpx.AsyncClient) -> ssl.SSLContext:
     return client._transport._pool._ssl_context
 
 
+class TestCreateClientEventHooks:
+    """요청 검사 훅(SSRF 방어 등)을 event_hooks로 넘길 수 있다."""
+
+    def test_event_hooks_passed_through(self):
+        async def guard(request):
+            return None
+
+        client = create_client(event_hooks={"request": [guard]})
+        assert client.event_hooks["request"] == [guard]
+
+
 class TestCreateClientSSL:
     """verify가 클라이언트가 아니라 실제 transport까지 전달되는지 (네트워크 없음)."""
 

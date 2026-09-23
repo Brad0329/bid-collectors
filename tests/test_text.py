@@ -1,6 +1,5 @@
 """clean_html(), clean_html_to_text() 단위 테스트."""
 
-import pytest
 from bid_collectors.utils.text import clean_html, clean_html_to_text
 
 

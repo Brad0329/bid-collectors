@@ -2,7 +2,6 @@
 
 import os
 import pytest
-from datetime import date
 from unittest.mock import patch
 
 import httpx
@@ -15,7 +14,6 @@ from bid_collectors.smes import (
     _extract_attachments,
     SmesCollector,
     API_URL,
-    DEFAULT_NUM_OF_ROWS,
 )
 
 

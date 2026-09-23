@@ -295,7 +295,7 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         start_date=rcpt_date or None,
         end_date=opinion_close or None,
         status=determine_status(opinion_close),
-        url=f"https://www.g2b.go.kr",
+        url="https://www.g2b.go.kr",
         detail_url="",
         budget=budget,
         category=t("prdctClsfcNoNm"),

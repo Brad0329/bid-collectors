@@ -1,6 +1,5 @@
 """GenericScraper 단위 + respx 통합 테스트."""
 
-import hashlib
 
 import httpx
 import pytest
@@ -521,7 +520,7 @@ class TestFetchIntegration:
 
     @respx.mock
     async def test_single_page_get(self):
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         today = datetime.now().strftime("%Y-%m-%d")
         html = self._make_page_html([
@@ -539,7 +538,7 @@ class TestFetchIntegration:
 
     @respx.mock
     async def test_multi_page_pagination(self):
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         today = datetime.now().strftime("%Y-%m-%d")
         page1_html = self._make_page_html([("공고1", today, "/d/1")])

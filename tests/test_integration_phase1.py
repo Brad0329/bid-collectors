@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from bid_collectors import (
+# 수집기가 생성 시점에 환경변수에서 키를 읽으므로 .env 로드 뒤에 import한다
+from bid_collectors import (  # noqa: E402
     NaraCollector,
     BizinfoCollector,
     Subsidy24Collector,

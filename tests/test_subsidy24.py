@@ -13,8 +13,6 @@ from bid_collectors.subsidy24 import (
     _is_business_target,
     Subsidy24Collector,
     API_URL,
-    DEFAULT_PER_PAGE,
-    BUSINESS_KEYWORDS,
 )
 
 

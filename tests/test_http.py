@@ -2,7 +2,6 @@
 
 import ssl
 
-import pytest
 import httpx
 from bid_collectors.utils.http import create_client, DEFAULT_USER_AGENT, DEFAULT_TIMEOUT
 

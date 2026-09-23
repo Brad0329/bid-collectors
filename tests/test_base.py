@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from bid_collectors.base import BaseCollector
 from bid_collectors.models import Notice
 

@@ -1,6 +1,5 @@
 """determine_status() 단위 테스트."""
 
-import pytest
 from datetime import date, timedelta
 from bid_collectors.utils.status import determine_status
 

@@ -1,7 +1,6 @@
 """기업마당 수집기(bizinfo.py) 단위 테스트."""
 
 import os
-import json
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -15,7 +14,6 @@ from bid_collectors.bizinfo import (
     _parse_attachments,
     BizinfoCollector,
     API_URL,
-    DEFAULT_PAGE_UNIT,
 )
 
 

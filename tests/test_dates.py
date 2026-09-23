@@ -1,6 +1,5 @@
 """parse_date() 단위 테스트."""
 
-import pytest
 from bid_collectors.utils.dates import parse_date
 
 

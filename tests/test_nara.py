@@ -2,7 +2,6 @@
 
 import os
 import pytest
-from datetime import datetime, timedelta
 from unittest.mock import patch, AsyncMock
 
 import httpx
@@ -16,7 +15,6 @@ from bid_collectors.nara import (
     NaraCollector,
     BASE_URL,
     BID_SERVICES,
-    ROWS_PER_PAGE,
 )
 
 

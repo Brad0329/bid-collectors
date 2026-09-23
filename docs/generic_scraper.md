@@ -5,7 +5,7 @@
 > **관련 문서:**
 > - [bid_collectors.md](bid_collectors.md) — 패키지 전체 구조
 > - [dev_reference.md](dev_reference.md) §5-6 — lets_portal 원본 레퍼런스
-> - [plan.md](plan.md) — Phase 2 작업 계획
+> - [plan.md](../work_log/plan.md) — 전체 계획 (이 문서의 "Phase 2"는 구 번호 = 현 Phase 003)
 
 ---
 
@@ -931,6 +931,8 @@ lets_portal은 모든 요청에 `verify=False`. bid-collectors는 `verify=True` 
 ---
 
 ## 8. 향후 확장 로드맵
+
+> 2026-09-23: 아래 "Phase 3/4"는 구 번호다. 현재 일정의 원본은 `work_log/plan.md` '이후 단계'(JSON API 모드 = v1.2).
 
 ### 8-1. JSON API 모드 (Phase 3)
 

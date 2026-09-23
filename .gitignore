@@ -35,3 +35,12 @@ htmlcov/
 # Distribution
 *.whl
 *.tar.gz
+
+# 개인 Claude Code 설정 (허용 규칙은 여기에만 효력이 있다)
+.claude/settings.local.json
+
+# AI 커밋 메시지 파일 (고정 경로 — docs/playbooks/노하우_승인_대기_최소화.md 참조)
+.commit_msg.txt
+
+# 일회성 스크립트 (덮어써서 쓰고 지우지 않는다 — CLAUDE.md '작업 속도 규칙')
+scripts/_tmp/

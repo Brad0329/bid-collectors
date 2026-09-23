@@ -366,6 +366,17 @@ class TestSmesCollectorFetch:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_api_key_masked_in_errors(self):
+        secret = "Ab+c/D==SECRET"
+        respx.get(API_URL).mock(return_value=httpx.Response(500))
+        result = await SmesCollector(api_key=secret).collect(days=1)
+        joined = " ".join(result.errors)
+        assert result.errors
+        assert "SECRET" not in joined
+        assert "serviceKey=***" in joined
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_max_pages_truncation_reported(self):
         route = respx.get(API_URL).mock(side_effect=[
             httpx.Response(200, content=_make_xml_response(

@@ -21,6 +21,13 @@ from bid_collectors import (  # noqa: E402
 )
 
 
+def _assert_no_errors_except_truncation(result: CollectResult) -> None:
+    """한도 절약을 위해 max_pages=1로 부르므로 절단 보고(v1.1)만 허용하고 그 외 오류는 실패로 본다."""
+    real = [e for e in result.errors if not e.startswith("max_pages=")]
+    assert real == [], f"수집 에러 발생: {real}"
+    assert result.is_partial == bool(result.errors)
+
+
 # ---------------------------------------------------------------------------
 # 1. NaraCollector (나라장터) 통합 테스트
 # ---------------------------------------------------------------------------
@@ -54,11 +61,8 @@ class TestNaraIntegration:
         assert result.source == "나라장터"
         assert result.collected_at is not None
         assert result.duration_seconds > 0
-        # API가 404/500이면 pages_processed=0이 될 수 있음
-        if result.pages_processed == 0 and result.errors == []:
-            # 에러 없이 0페이지 = API가 모든 요청을 거부 (인프라 이슈)
-            pytest.skip("나라장터 API에서 데이터 수신 불가 — pages_processed=0")
-        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        # v1.1부터 API 거부는 errors로 온다 — "에러 없이 0페이지"로 조용히 건너뛰던 분기는 없앴다
+        _assert_no_errors_except_truncation(result)
         assert result.pages_processed > 0
 
     @pytest.mark.integration
@@ -104,7 +108,7 @@ class TestBizinfoIntegration:
 
         assert isinstance(result, CollectResult)
         assert result.source == "기업마당"
-        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        _assert_no_errors_except_truncation(result)
         assert result.collected_at is not None
         assert result.duration_seconds > 0
         assert result.pages_processed > 0
@@ -151,7 +155,7 @@ class TestSubsidy24Integration:
 
         assert isinstance(result, CollectResult)
         assert result.source == "보조금24"
-        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        _assert_no_errors_except_truncation(result)
         assert result.collected_at is not None
         assert result.duration_seconds > 0
         assert result.pages_processed > 0
@@ -198,7 +202,7 @@ class TestKstartupIntegration:
 
         assert isinstance(result, CollectResult)
         assert result.source == "K-Startup"
-        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        _assert_no_errors_except_truncation(result)
         assert result.collected_at is not None
         assert result.duration_seconds > 0
         assert result.pages_processed > 0
@@ -246,7 +250,7 @@ class TestSmesIntegration:
         assert isinstance(result, CollectResult)
         assert result.source == "중소벤처기업부"
         # API가 최근 기간에 데이터가 없을 수 있으므로 에러만 없으면 OK
-        assert result.errors == [], f"수집 에러 발생: {result.errors}"
+        _assert_no_errors_except_truncation(result)
         assert result.collected_at is not None
         assert result.duration_seconds > 0
 

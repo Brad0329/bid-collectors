@@ -1,11 +1,11 @@
 # bid-collectors — 공공 입찰공고·지원사업 수집 파이썬 패키지
 
-Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.0.0). 소비자는 BidWatch.
+Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.1.0). 소비자는 BidWatch.
 (2026-09-23 greenfield 템플릿 체계를 기존 저장소에 이식 — Phase 001~003은 이식 전에 완료됐다.)
 
 ## 현재 단계
 - 전체 Phase 체크리스트/아키텍처의 **단일 원본 = `work_log/plan.md`** (여기에 중복 기재 금지)
-- 현재: **Phase 004 — v1.1 신뢰성** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
+- 현재: **Phase 004 완료(2026-09-23) — 다음 Phase 미발급**, plan.md '이후 단계'에서 골라 번호를 받는다 (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
 
 ## 새 세션 시작 시
 - 훅(`session_context.py`)이 plan.md의 현재 Phase·읽을 Phase 로그·실테스트 대기를 주입한다 — 지시대로 읽는다.
@@ -33,7 +33,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 - 계약 **결정의 기록 = `docs/CONTRACT.md`**, 계약 명세 = `docs/interface.md`.
 - **AI는 임의로 계약을 바꾸지 않는다.** ① 변경안(무엇을·왜·영향·버전)을 CONTRACT.md에 먼저 기록 → ② 사용자 확인 → ③ 반영.
 - **필드·선택 인자 추가 = minor, 제거·이름 변경·타입 변경·bid_no 형식 변경 = major.** 버전은 `pyproject.toml`과 `__init__.py` 둘 다.
-- **`docs/interface.md`는 bidwatch 저장소에 같은 문서가 있다 — 고치면 양쪽 다.** (이미 어긋나 있다 — CONTRACT.md '알려진 문서 불일치')
+- **`docs/interface.md`는 bidwatch 저장소에 같은 문서가 있다 — 고치면 양쪽 다.** (2026-09-23 v1.1.0에서 동일하게 맞춤)
 - 코드가 "현재 상태"의 정답이다. 문서와 어긋나면 문서를 고친다. `extra` 안의 키는 계약 밖이다.
 
 ## 작업 트랙 ★저위험이 기본값이다 — 기준은 "몇 줄이냐"가 아니라 "되돌리기가 비싼가"
@@ -88,7 +88,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   | F-002 | 나라장터 확장 — 낙찰·계약·사전규격 | 완료 |
   | F-003 | K-Startup 사업공고 수집 | 완료 |
   | F-004 | 기업마당 지원사업 수집 | 완료 |
-  | F-005 | 보조금24 공공서비스 수집 | 완료 |
+  | F-005 | 보조금24 공공서비스 수집 | 완료 (서버 필터 형식 수정 Phase 004) |
   | F-006 | 중소벤처기업부 사업공고 수집 | 완료 |
   | F-007 | GenericScraper — config 기반 HTML 게시판 수집 | 완료 (실패·절단 보고·요청 훅 Phase 004) |
   | F-008 | 상세 조회 fetch_detail | 완료 |
@@ -191,6 +191,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 - **API를 curl로 시험하지 말 것** — 인코딩·파라미터 인코딩 차이로 404·한글 깨짐이 나서 오진한다. 파이썬(httpx)으로 (`Phase_002.md` §9).
 - **숫자 필드에 `or` 금지**(`budget or est_price`는 0원을 버린다) · extra 필터는 `if v is not None and v != ""` (`Phase_002_review.md` §5).
 - **cutoff는 자정으로 절삭한다** — `now - timedelta(days)`는 시각을 포함해 당일 공고가 빠진다(`Phase_002_review.md` §5-2).
+- **서버 날짜 필터는 API 값 형식 그대로 보내고 건수로 확인한다** — odcloud `cond[...::GTE]`는 문자열 비교라 형식이 다르면 조용히 무력화된다(보조금24 `YYYYMMDDHHMMSS`, `Phase_004.md` ①).
 - **httpx에 커스텀 transport를 넘기면 클라이언트의 `verify` 등 transport 인자가 무시된다** — `create_client`가 transport로 옮긴다(`152f930`).
 
 ## CLAUDE.md 비대화 방지 ★이 파일에는 상한이 있다

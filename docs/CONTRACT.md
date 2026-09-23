@@ -21,7 +21,7 @@
 - 수집기는 **가져오기만** 한다 — 저장·매칭·스케줄·캐시는 소비자. 새 요구가 소비자 쪽 일이면 여기서 받지 않는다.
 - 동기 대신 **async(httpx)** — BidWatch 워커가 여러 출처를 병렬로 부른다.
 - 부분 실패는 예외가 아니라 `CollectResult.errors`/`is_partial`로 알린다 — 앞서 모은 공고를 버리지 않는다
-  (현재 위반 다수 — `work_log/plan.md` Phase 004).
+  (v1.1.0에서 `collect()` 경로 전부 적용. 예외: 나라장터 확장 3메서드는 반환형이 list라 예외로 알린다 — 아래 결정).
 - 출처별 추가 필드는 `Notice`에 필드를 늘리지 않고 `extra`에 둔다(출처마다 필드가 달라 표준화 비용이 크다).
 
 ## 결정
@@ -33,6 +33,12 @@
 ### 나라장터 확장 메서드는 `list[Notice]`를 반환한다
 - **결정**: `collect_awards`·`collect_contracts`·`collect_pre_specs`는 `CollectResult`가 아니라 리스트를 반환(2026-04-11).
 - **결과**: 에러가 예외로 호출자에게 간다. 바꾸면(→ `CollectResult`) BidWatch 연쇄 수집 코드가 깨지므로 **major**.
+  v1.1.0에서 재시도 소진도 조용한 빈 결과 대신 `RuntimeError`(키 마스킹)로 바꿨다 — 부분 결과 보존은 반환형을 바꿔야 해서 안 함(2026-09-23 사용자 확정).
+
+### 수집기 내부 오류는 `_fetch`의 세 번째 반환 요소로 올린다 (2026-09-23)
+- **결정**: `_fetch`가 `(notices, pages, errors)`를 돌려줄 수 있고 `collect()`가 errors를 마스킹해 싣고 `is_partial = bool(errors)`.
+  2-튜플도 계속 받는다.
+- **버린 대안**: 인스턴스에 누적(`self._errors`) — `_fetch` 시그니처는 안 바뀌지만 같은 인스턴스로 `collect()`를 동시에 부르면 오류가 섞인다.
 
 ### 나라장터 `fetch_detail`은 None
 - **결정**: data.go.kr에 단건 조회·사업개요 API가 없어 g2b 스크래핑을 제거하고 None 반환, 상세 필드는 수집 시 extra에(2026-04-13).
@@ -41,14 +47,11 @@
 ## 변경 이력 (최신이 위)
 | 날짜 | 변경안 (무엇을, 왜, 영향 범위, 버전) | 사용자 확인 | 반영 |
 |---|---|---|---|
-| 2026-09-23 | v1.1.0 신뢰성 — 페이지 실패·쿼터 초과·max_pages 절단을 `errors`/`is_partial`로 보고(기존 필드, 의미만 채움. errors 문자열의 API 키는 마스킹) · `GenericScraper(config, event_hooks=None)` 선택 인자 추가(httpx `event_hooks` 형식 그대로, session_init_url·페이지·health_check·리다이렉트 전부에 걸린다. `create_client`는 원래 `**kwargs`로 넘기던 것을 문서화) · 나라장터 확장 3메서드는 반환형 유지 — 재시도 소진 시 조용히 빈 결과 대신 예외(키 마스킹) · 내부: `_fetch`가 `(notices, pages, errors)` 3-튜플을 돌려줄 수 있다(2-튜플도 계속 받음, BidWatch는 상속하지 않음) — minor | ✅ 2026-09-23 (bidwatch 세션 합의 + 이 세션 확정) | Phase 004 |
+| 2026-09-23 | v1.1.0 신뢰성 — 페이지 실패·쿼터 초과·max_pages 절단을 `errors`/`is_partial`로 보고(기존 필드, 의미만 채움. errors 문자열의 API 키는 마스킹) · `GenericScraper(config, event_hooks=None)` 선택 인자 추가(httpx `event_hooks` 형식 그대로, session_init_url·페이지·health_check·리다이렉트 전부에 걸린다. `create_client`는 원래 `**kwargs`로 넘기던 것을 문서화) · 나라장터 확장 3메서드는 반환형 유지 — 재시도 소진 시 조용히 빈 결과 대신 예외(키 마스킹) · 내부: `_fetch`가 `(notices, pages, errors)` 3-튜플을 돌려줄 수 있다(2-튜플도 계속 받음, BidWatch는 상속하지 않음) — minor | ✅ 2026-09-23 (bidwatch 세션 합의 + 이 세션 확정) | `5af39f3` (bidwatch `67fe562` interface.md) |
 | 2026-04-13 | 나라장터 `fetch_detail` 스크래핑 제거 → None | ✅ | `1a037e3` |
 | 2026-04-11 | v1.0.0 — `GenericScraper`/`ScraperConfig` export, 나라장터 확장 3메서드, `fetch_detail` 추가 | ✅ | `3f21d98`·`714420e` |
 | 2026-04-06 | 초기 계약 — `Notice`·`CollectResult`·`BaseCollector._fetch` 템플릿 메서드 | ✅ | `c61291e`·`c188559` |
 
-## 알려진 문서 불일치 (Phase 004에서 `interface.md` 갱신 시 함께 정리)
-- `interface.md`가 `fetch_detail`·`ScraperConfig`를 다루지 않는다. §4의 `GenericScraper.__init__`이 dict만 받는 것처럼
-  적혀 있으나 실제로는 `ScraperConfig | dict`이고 dict는 즉시 검증된다.
-- §5 환경변수 표에 미구현 수집기(LH·한전·도로공사·수자원공사·방위사업청·중소벤처24)가 있다.
-- **bidwatch 쪽 `interface.md`가 이미 어긋나 있다** — `BaseCollector`를 `_fetch` 이전 형태(`collect`가 abstract)로 적고 있다
-  (2026-04-06 `c188559`에서 이쪽만 고쳐짐). 다음 갱신 때 이쪽 판으로 맞춘다.
+## 알려진 문서 불일치
+(없음 — 2026-09-23 v1.1.0에서 정리: `fetch_detail`·`ScraperConfig`·`ScraperConfig | dict` 기재, 미구현 수집기 환경변수 행 제거,
+bidwatch 쪽 판을 이쪽과 동일하게 맞춤 `67fe562`.)

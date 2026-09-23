@@ -10,7 +10,7 @@
 
 ## 시스템 개요
 - 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부)와 임의 HTML
-  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.0.0).
+  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.1.0).
   소비자는 BidWatch(`C:\Users\user\Documents\bidwatch`, editable 설치). 역할 경계: 외부 사이트에서 공고를 가져오는 것은
   전부 이 패키지 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은 BidWatch. 요구사항 상세는 `docs/REQUIREMENTS.md`.
 
@@ -29,7 +29,8 @@
 - [x] Phase 003: GenericScraper + 나라장터 확장(낙찰·계약·사전규격) + fetch_detail + v1.0.0 릴리스 (2026-04-11, 나라장터 상세 필드 보강 2026-04-13) — 로그 `Phase_003.md`(구현 상세) · `Phase_003_decisions.md`(결정 이유) · `Phase_003_detail.md`(나라장터 상세 API 조사·실패한 접근)
   - 구 완료 기준 대조(2026-09-23 이식 시): 나라장터 확장·v1.0 릴리스·README 완료 / 중소벤처24는 **안 함**(LINK 타입 API, `smes.py`가 같은 데이터 — `Phase_003.md` §10) /
     "lets_portal config 샘플 5개 통과"는 체크되지 않았으나 BidWatch가 2026-09-23 손 설정 39곳을 GenericScraper로 돌려 기준선으로 씀(29곳 1건 이상 — bidwatch `work_log/plan.md`)
-- [ ] Phase 004: v1.1 신뢰성 — 조용한 실패·절단 제거 + 요청 검사 훅 (F-001·F-005·F-007 미충족 기준) — **interface 호환(기존 필드 사용·선택 인자 추가) → minor, 1.0.0 → 1.1.0**
+- [x] Phase 004: v1.1 신뢰성 — 조용한 실패·절단 제거 + 요청 검사 훅 (F-001·F-005·F-007 미충족 기준) — **interface 호환(기존 필드 사용·선택 인자 추가) → minor, 1.0.0 → 1.1.0**
+  (2026-09-23, `5af39f3`·`3ff4547`·`b35b3dd`, 태그 v1.0.0=`a2ce40c`·v1.1.0 — 로그 `Phase_004.md`. qa-tester 352 passed/0 failed(실 API 17건 포함), BidWatch backend/tests 통과)
   - 출처: 2026-09-23 bidwatch 세션 합의 작업 지시서. 착수 전 `docs/CONTRACT.md` 변경 이력의 예정 행을 사용자 확인으로 확정.
   1. **조용한 실패 제거** — 페이지 요청 실패 시 로그만 남기고 `break`하는 곳을 `CollectResult.errors`/`is_partial`에 기록:
      `generic_scraper.py` ~200 · `bizinfo.py` ~55 · `kstartup.py` ~54 · `subsidy24.py` ~59(+ ~63 API 에러 코드) · `smes.py` ~55(+ ~61 XML 에러) ·
@@ -78,26 +79,29 @@
 - 2026-09-23 작업 체계를 greenfield 템플릿으로 이식: Phase 로그는 실패한 접근이 있을 때만 · 테스트/서류 전담 agent 대신
   메인 agent가 사다리대로 검증하고 Phase 통합 테스트만 `qa-tester`(foreground) · 화면 규칙은 해당 없음(라이브러리)
 
+- errors 누적 방식 = `_fetch` 세 번째 반환 요소(인스턴스 누적은 동시 호출 시 섞여 버림) · 나라장터 확장 3메서드는 반환형 유지,
+  실패는 예외 (2026-09-23 사용자 확정, `docs/CONTRACT.md`)
+
 **미정**
-- Phase 004의 errors 누적 방식(`_fetch` 반환 모양 변경 vs 인스턴스 누적) — 착수 시
 - 공기업 API 5종의 필요성 — BidWatch 수요 확인 후
 
 ## 사용자 실테스트 대기
-(없음 — 라이브러리라 소비자 연동 확인은 bidwatch 세션에서 한다)
+- **BidWatch 연동(bidwatch 세션 몫)** — ① 정기·시험 수집의 `GenericScraper(...)` 3곳(`tasks/collect_scraper.py`·`services/scraper_ai.py`·
+  `routers/sources.py`)에 `event_hooks={"request": [guard_request]}` 꽂기 ② v1.1부터 `is_partial`/errors가 채워진다 —
+  보조금24 정기 수집은 이제 절단 보고 대신 정상 건수(1일 24건 수준)로 온다, GenericScraper는 max_pages 절단이 errors로 온다(기본 3페이지)
+  ③ bidwatch venv에서 `pip install -e` 재실행(메타데이터가 1.0.0으로 남아 있음, 코드는 editable이라 이미 1.1.0)
 
 ## 보류 항목 (나중에 할 것)
 
 > 조사만 하고 미룬 것을 여기 남긴다. **다시 조사하지 않아도 되도록 실측 결과와 근거까지** 적는다.
 
-- **템플릿 규칙 위반 — 이식 시점(2026-09-23) 발견, 코드 미수정**. 조용한 실패·절단은 Phase 004 목록에 있다. 그 밖:
-  - `generic_scraper.py:195` `session_init_url` 응답을 검사하지 않는다(`raise_for_status` 없음) — 쿠키 획득 실패가 조용히 넘어간다.
-  - `generic_scraper.py:365` 행 파싱 예외를 **debug** 레벨로만 남긴다 — 운영 로그 레벨에선 안 보인다(건너뛴 행 수를 결과에 남길지 Phase 004에서 함께 판단).
+- **템플릿 규칙 위반 — 이식 시점(2026-09-23) 발견**. 조용한 실패·절단·session_init 무검사·행 파싱 예외 debug는 Phase 004에서 해소. 남은 것:
   - `nara.py` `_split_date_range`가 경계일을 두 범위에 겹쳐 넣는다 — `collect()`의 중복 제거가 흡수(의도적 유보, `Phase_002_review.md` §3).
-- **수용 기준의 테스트 미대응** — F-002(나라장터 확장 3메서드)·F-008(fetch_detail) 단위 테스트가 없다(`docs/REQUIREMENTS.md` 항목별 표시).
-  해당 기능을 다음에 건드릴 때 그 기능의 테스트부터 붙인다. Phase 004 항목 2가 `_fetch_extended`를 건드리면 그때.
+- **수용 기준의 테스트 미대응** — F-008(fetch_detail) 단위 테스트가 없다(`docs/REQUIREMENTS.md` 항목별 표시). 다음에 건드릴 때 테스트부터.
+  (F-002는 Phase 004에서 대응.)
+- **같은 규칙의 복제 — XML 파싱**: `nara._parse_xml_items` ↔ `smes._parse_xml_response` 대조 테스트 없음(CLAUDE.md '구조').
 - **통합 테스트가 실제 API를 부른다** — `tests/test_integration_phase1.py`(`-m integration`)는 `load_dotenv()`가 상위 디렉토리로
   올라가며 `.env`를 찾아 워크트리에서도 메인 체크아웃의 키로 실호출한다(data.go.kr 일 한도 소모). 루틴 실행은 `-m "not integration"`.
-- **`docs/interface.md` 양쪽 불일치** — 상세는 `docs/CONTRACT.md` '알려진 문서 불일치'. Phase 004 항목 6에서 정리.
 - **이식 시 미추적 파일 처리(2026-09-23 사용자 결정)** — `docs/work_log/phase2_new.md` → `work_log/Phase_003_decisions.md`(내용 불변,
   `Phase_003_detail.md`가 "선행 작업: phase2_new.md"로 가리키는 파일) / `docs/bid-collectors-detail-api-spec.md`(BidWatch의 fetch_detail
   개발 요청서, 구현 완료) → `docs/archive/` / `docs/project_management_guide.md`는 템플릿 체계가 대체 — 커밋하지 않음, 메인 체크아웃에서 삭제 여부는 사용자 결정.

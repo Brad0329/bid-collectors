@@ -5,7 +5,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 
 ## 현재 단계
 - 전체 Phase 체크리스트/아키텍처의 **단일 원본 = `work_log/plan.md`** (여기에 중복 기재 금지)
-- 현재: **Phase 004 완료(2026-09-23) — 다음 Phase 미발급**, plan.md '이후 단계'에서 골라 번호를 받는다 (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
+- 현재: **Phase 005 발급(2026-09-24) — 항목 수준 조용한 실패 제거, 미착수** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
 
 ## 새 세션 시작 시
 - 훅(`session_context.py`)이 plan.md의 현재 Phase·읽을 Phase 로그·실테스트 대기를 주입한다 — 지시대로 읽는다.

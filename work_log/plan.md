@@ -53,6 +53,24 @@
      전체 URL이 들어간다. 지금도 `health_check()`가 `message: str(e)`로 키를 돌려줄 수 있고, 항목 1로 페이지 오류를 errors에 담으면
      `CollectResult.errors` → BidWatch 수집 이력 DB까지 키가 간다. 기록 전 키 마스킹 + 그것을 잡는 테스트.
   - 완료 조건: 전체 테스트 0 failed · REQUIREMENTS F-001·F-005·F-007의 미충족 기준 충족 + 테스트 대응 · BidWatch 쪽 연동 확인은 bidwatch 세션 몫
+- [ ] Phase 005: 항목 수준 조용한 실패 제거 — 필드 이상 1건이 결과를 지우거나 조용히 사라지지 않게 (F-001·F-003~F-007) — **계약 불변(errors 내용만 늘어남) → patch**
+  - 출처: 2026-09-24 구조 리뷰(rebuild 사유 판정 — 전면 재작성 불요, R1~R3만 지금). 재현 스크립트 `scripts/_tmp/review_repro.py`(고정 응답, 코드 수정 없음).
+    Phase 004는 **페이지** 단위 실패를 맞췄고 **항목** 단위는 수집기마다 4갈래로 남았다 — 알리오 v1.2.2가 한 곳만 고친 것이 "한쪽만 고쳐 재발"의 실례.
+  - 트랙: 저위험. `BaseCollector`에 **비공개** 헬퍼만 추가하고 `_fetch` 시그니처·템플릿 구조·bid_no 형식은 그대로 — interface.md 변경 없음.
+    단 BidWatch가 받는 `is_partial=True`가 늘어난다 → 완료 시 bidwatch `backend/tests` 통과 확인 + "사용자 실테스트 대기"에 한 줄.
+  1. **R1 항목 변환 실패 정책 통일** — 한 항목의 예외는 그 항목만 건너뛰고 **사유별 건수**를 errors에(알리오 `skip_reasons` 방식).
+     재현: 기업마당(`bizinfo.py:72`)·보조금24(`subsidy24.py:85`)는 try가 없어 null 필드 1건에 **앞 페이지까지 0건**(pydantic 원문이 errors로) /
+     나라장터(`nara.py:378`)·중소벤처(`smes.py:80`)는 로그만 남기고 버림 / 보조금24 `subsidy24.py:130`은 None 반환으로 조용히 버림 /
+     K-Startup(`kstartup.py:70`)은 try 없음 — `clean_html`이 None을 흡수해 지금은 버틸 뿐. 알리오·GenericScraper는 이미 보고한다(헬퍼로 옮길지는 착수 시).
+  2. **R2 빈 ID 충돌** — 수집기별 필수 필드(최소 ID·제목)를 선언하고 빠지면 R1 경로로 건너뛰고 보고. 재현: `pblancId` 없는 3건 → `"BIZINFO-"`로 합쳐져 1건,
+     errors 없음(BidWatch upsert에서 서로 다른 공고가 한 행을 덮어씀). 같은 자리: `kstartup.py:188`·`smes.py:139`·`nara.py:103`(입찰공고). 숫자 ID 0은 유효(알리오 교훈).
+  3. **R3 GenericScraper 셀렉터 불일치 감지** — 목록 행은 잡혔는데 공고 0건·cutoff 이전 행 0건이면 "셀렉터 불일치 의심 — 행 N개 중 추출 0건"을 errors에.
+     재현: 제목·날짜 셀렉터가 틀리면 0건·errors 없음(`generic_scraper.py:359-372`의 continue는 세지 않음). 실례: bidwatch plan.md:100 손 설정 3곳이
+     사이트 개편으로 낡은 것을 기준선 대조로만 발견 / bidwatch는 시험 수집에만 "날짜 파싱 50% 미만" 탈락을 두고 정기 수집엔 없다.
+     **착수 시 사용자 확인**: 목록 행 자체가 0개인 경우(빈 게시판과 구분 불가)도 보고할지 — 기본안은 보고하지 않음.
+  - 범위 밖(이유): `_fetch_extended`(낙찰·계약·사전규격)의 항목 건너뜀은 반환형 `list[Notice]`라 errors 채널이 없다(CONTRACT.md) — 로그만 유지, 바꾸면 major.
+  - 완료 조건: REQUIREMENTS '공통 계약'의 (v1.2.3) 기준 3개 충족 + 수집기별 "null 필드 1건·빈 ID"에서 **건수를 재는** 테스트(변이 확인) ·
+    전체 테스트 0 failed · 버전 1.2.2 → 1.2.3(`pyproject.toml`·`__init__.py`)
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 

@@ -158,13 +158,19 @@
 
 ### F-010: 알리오 공공기관 입찰공고 수집 (`AlioCollector`)
 - **설명**: 알리오 입찰공고 화면이 부르는 공개 JSON(`GET alio.go.kr/occasional/findBidList.json`, 인증 없음, 10건/페이지,
-  공고일 최신순). 서버 날짜 필터가 없어 기준일보다 오래된 공고가 나오면 멈춘다. **API 키 불필요.**
+  **등록(seq) 최신순 — 공고일은 뒤섞인다**). 서버 날짜 필터가 없어 기준일 이전 항목은 버리고, 기준일 이후 항목이 없는 페이지가
+  2번 연달아 나오면 멈춘다(v1.2.3 — 종전 "첫 오래된 항목에서 멈춤"은 9/22 공고 472건을 errors 없이 놓쳤다). 평일 하루 약
+  450~500건이라 기본 max_pages 150(≈3일치). **API 키 불필요.**
   bid_no = `ALIO-{seq}`, organization = 공고 기관(`pname`), 상세 = `bidDtl.do?seq=`. 자체조달 공기업 공고를 받기 위해
   (bidwatch `docs/procurement_sources_research.md` 3-1). fetch_detail은 None(목록에 본문 없음 — 필요해지면 추가).
 - **수용 기준**:
   - [x] 항목 → Notice(제목 공백 정리·기관·공고일·마감일·상태·상세 URL) → `test_item_maps_to_notice`
   - [x] API 키 없이 생성된다 → `test_no_api_key_needed`
-  - [x] 기준일보다 오래된 항목에서 멈추고 그 뒤와 다음 페이지를 받지 않는다 → `test_stops_at_cutoff_without_next_page`·`test_continues_to_next_page_until_cutoff`
+  - [x] (v1.2.3) 기준일 이전 항목이 새 항목 사이에 끼어도 멈추지 않고 뒤의 새 항목까지 받는다(회귀 — 2026-09-24 누락 472건)
+    → `test_interleaved_old_item_does_not_stop_collection`
+  - [x] (v1.2.3) 기준일 이후 항목이 없는 페이지 2연속에서 멈추고, 1페이지만 오래됐으면 계속 받는다
+    → `test_stops_after_two_consecutive_old_pages` · `test_single_old_page_does_not_stop`
+  - ~~기준일보다 오래된 항목에서 멈추고 그 뒤와 다음 페이지를 받지 않는다~~ — 폐기(v1.2.3, 등록 순 목록이라 누락을 낳음)
   - [x] 1페이지 실패는 0건 + errors, 2페이지 실패(status≠success 포함)는 1페이지 보존 + errors → `test_first_page_failure_*`·`test_second_page_failure_keeps_first_page`·`test_non_success_status_raises`
   - [x] max_pages 상한 도달 시 절단 사실과 전체 건수를 errors에 → `test_max_pages_truncation_reported_with_total`
   - [x] seq 없는 항목은 건너뛰고 건수를 errors에 → `test_item_without_seq_is_skipped_and_reported`

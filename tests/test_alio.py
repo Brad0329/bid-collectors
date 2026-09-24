@@ -53,25 +53,47 @@ class TestInit:
 class TestFetch:
     @pytest.mark.asyncio
     @respx.mock
-    async def test_stops_at_cutoff_without_next_page(self):
-        """공고일 최신순 — 기준일보다 오래된 항목이 나오면 그 뒤는 버리고 다음 페이지를 부르지 않는다."""
-        route = respx.get(API_URL).mock(return_value=httpx.Response(200, json=_body(
-            [_item(10, 0), _item(9, 1), _item(8, 5), _item(7, 6)])))
+    async def test_interleaved_old_item_does_not_stop_collection(self):
+        """회귀(2026-09-24 실측): 목록은 등록 순이라 오래된 공고일 항목이 새 항목 사이에 낀다(강원랜드 9/21이 9/22 사이).
+        종전 코드는 그 항목에서 멈춰 뒤의 새 공고 472건을 errors 없이 놓쳤다. 오래된 항목만 버리고 계속 받아야 한다."""
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_body([_item(30, 0), _item(29, 5), _item(28, 0)])),  # 사이에 오래된 것
+            httpx.Response(200, json=_body([_item(27, 1)])),
+            httpx.Response(200, json=_body([_item(26, 5)])),
+            httpx.Response(200, json=_body([_item(25, 6)])),
+        ])
         result = await AlioCollector().collect(days=2)
-        assert [n.bid_no for n in result.notices] == ["ALIO-10", "ALIO-9"]
-        assert route.call_count == 1
+        assert [n.bid_no for n in result.notices] == ["ALIO-30", "ALIO-28", "ALIO-27"]
+        assert route.call_count == 4
         assert result.is_partial is False
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_continues_to_next_page_until_cutoff(self):
+    async def test_stops_after_two_consecutive_old_pages(self):
         route = respx.get(API_URL).mock(side_effect=[
-            httpx.Response(200, json=_body([_item(20, 0), _item(19, 0)])),
-            httpx.Response(200, json=_body([_item(18, 1), _item(17, 9)])),
+            httpx.Response(200, json=_body([_item(20, 0)])),
+            httpx.Response(200, json=_body([_item(19, 5)])),
+            httpx.Response(200, json=_body([_item(18, 6)])),
+            httpx.Response(200, json=_body([_item(17, 0)])),  # 여기까지 오면 안 된다
         ])
-        result = await AlioCollector().collect(days=3)
-        assert [n.bid_no for n in result.notices] == ["ALIO-20", "ALIO-19", "ALIO-18"]
-        assert route.call_count == 2
+        result = await AlioCollector().collect(days=2)
+        assert [n.bid_no for n in result.notices] == ["ALIO-20"]
+        assert route.call_count == 3
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_single_old_page_does_not_stop(self):
+        """과거 공고일 공고를 한꺼번에 등록하면 한 페이지가 통째로 오래될 수 있다 — 한 페이지로는 멈추지 않는다."""
+        route = respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_body([_item(40, 0)])),
+            httpx.Response(200, json=_body([_item(39, 5), _item(38, 6)])),
+            httpx.Response(200, json=_body([_item(37, 0)])),
+            httpx.Response(200, json=_body([_item(36, 5)])),
+            httpx.Response(200, json=_body([_item(35, 6)])),
+        ])
+        result = await AlioCollector().collect(days=2)
+        assert [n.bid_no for n in result.notices] == ["ALIO-40", "ALIO-37"]
+        assert route.call_count == 5
 
     @pytest.mark.asyncio
     @respx.mock

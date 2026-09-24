@@ -4,7 +4,8 @@ API: GET https://alio.go.kr/occasional/findBidList.json?type=title&word=&pageNo=
      (알리오 입찰공고 화면 bidList.do가 부르는 공개 JSON — 인증 없음, 페이지당 10건)
 응답: {"status": "success", "data": {"result": [...], "totalCnt": N, "page": {...}}}
       항목: rtitle(제목) pname(기관) bdate(공고일 YYYY.MM.DD) bidInfoEndDt(마감일) seq(상세 번호)
-정렬: 공고일 최신순 — 기준일보다 오래된 공고가 나오면 멈춘다(서버 날짜 필터 없음).
+정렬: 등록(seq) 최신순 — 공고일은 대체로 내려가지만 뒤섞인다. 서버 날짜 필터가 없어, 기준일 이전 항목은 버리고
+      기준일 이후 항목이 없는 페이지가 OLD_PAGES_TO_STOP번 연달아 나오면 멈춘다(2026-09-24 누락 결함 수정 — v1.2.3).
 
 왜 필요한가: 자체 전자조달을 쓰는 공기업(수자원·코레일·한전·LH…)은 나라장터 API에 공고가 거의 없고
 알리오에 모인다(bidwatch docs/procurement_sources_research.md 3-1, 2026-09-24 실측).
@@ -25,9 +26,14 @@ logger = logging.getLogger("bid_collectors")
 
 API_URL = "https://alio.go.kr/occasional/findBidList.json"
 DETAIL_URL = "https://alio.go.kr/occasional/bidDtl.do"
-# 10건/페이지, 하루 약 160건(2026-09-24 실측: 3일치 474건, 페이지당 약 2.5초) → 50페이지 ≈ 3일치.
-# 정기 수집(days=1, 약 30페이지)은 안에 들어온다. 더 긴 기간은 상한에서 멈추고 errors로 알린다.
-DEFAULT_MAX_PAGES = 50
+# 10건/페이지, 평일 하루 약 450~500건(2026-09-24 실측: 9/22 506·9/23 439), 페이지당 약 2.5초.
+# days=1은 오늘+어제라 약 100페이지 → 150페이지 ≈ 3일치. 더 긴 기간은 상한에서 멈추고 errors로 알린다.
+# (종전 주석 "하루 약 160건·50페이지 ≈ 3일치"는 아래 조기 종료 결함으로 덜 받은 474건으로 계산한 틀린 값이었다.)
+DEFAULT_MAX_PAGES = 150
+# 목록은 공고일 순이 아니라 등록(seq) 순이다 — 오래된 공고일 항목이 새 항목 사이에 끼어 온다(110페이지 실측: 역전 3곳).
+# 그래서 오래된 항목 하나에서 멈추지 않고, 기준일 이후 항목이 하나도 없는 페이지가 이만큼 연달아 나와야 멈춘다.
+# 1이 아니라 2인 이유: 한 기관이 과거 공고일 공고를 한꺼번에 등록하면 한 페이지가 통째로 오래될 수 있다.
+OLD_PAGES_TO_STOP = 2
 
 
 class AlioCollector(BaseCollector):
@@ -48,7 +54,7 @@ class AlioCollector(BaseCollector):
         pages_processed = 0
         skip_reasons: Counter[str] = Counter()
         total_count = 0
-        reached_cutoff = False
+        old_pages = 0  # 기준일 이후 항목이 없는 페이지가 연달아 몇 개인가
 
         async with create_client(timeout=20.0) as client:
             page = 1
@@ -68,6 +74,7 @@ class AlioCollector(BaseCollector):
                 if not items:
                     break
                 pages_processed += 1
+                dated = recent = 0
 
                 for item in items:
                     try:
@@ -80,12 +87,16 @@ class AlioCollector(BaseCollector):
                         logger.warning(f"[알리오] 항목 파싱 실패: {e}", exc_info=True)
                         skip_reasons[f"{type(e).__name__}"] += 1
                         continue
-                    if notice.start_date and notice.start_date < cutoff:
-                        reached_cutoff = True
-                        break
+                    dated += 1
+                    if notice.start_date < cutoff:
+                        continue  # 오래된 항목은 버리되 멈추지 않는다 — 뒤에 기준일 이후 항목이 더 올 수 있다
+                    recent += 1
                     notices.append(notice)
 
-                if reached_cutoff:
+                # 날짜를 읽은 항목이 있는데 전부 기준일 이전인 페이지만 "오래된 페이지"로 센다
+                # (전부 건너뛴 페이지는 판단 근거가 없어 세지 않는다)
+                old_pages = old_pages + 1 if dated and not recent else 0
+                if old_pages >= OLD_PAGES_TO_STOP:
                     break
                 page += 1
             else:

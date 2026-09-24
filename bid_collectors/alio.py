@@ -24,7 +24,9 @@ logger = logging.getLogger("bid_collectors")
 
 API_URL = "https://alio.go.kr/occasional/findBidList.json"
 DETAIL_URL = "https://alio.go.kr/occasional/bidDtl.do"
-DEFAULT_MAX_PAGES = 50  # 10건/페이지 — 하루 약 50건(2026-09-24 실측)이라 10일치 안팎
+# 10건/페이지, 하루 약 160건(2026-09-24 실측: 3일치 474건, 페이지당 약 2.5초) → 50페이지 ≈ 3일치.
+# 정기 수집(days=1, 약 30페이지)은 안에 들어온다. 더 긴 기간은 상한에서 멈추고 errors로 알린다.
+DEFAULT_MAX_PAGES = 50
 
 
 class AlioCollector(BaseCollector):

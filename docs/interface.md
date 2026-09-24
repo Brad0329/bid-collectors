@@ -55,7 +55,7 @@ class Notice(BaseModel):
 | 규칙 | 설명 |
 |------|------|
 | `bid_no` 형식 | 수집기마다 자유. 단, source 내에서 UNIQUE 보장 |
-| `bid_no` 예시 | 나라장터: `"용역-20260405001-00"`, 기업마당: `"BIZINFO-12345"`, 스크래퍼: `"SCR-kocca-a1b2c3d4e5"` |
+| `bid_no` 예시 | 나라장터: `"용역-20260405001-00"`, 기업마당: `"BIZINFO-12345"`, 알리오: `"ALIO-3580351"`, 스크래퍼: `"SCR-kocca-a1b2c3d4e5"` |
 | `status` 값 | `"ongoing"` (진행중), `"closed"` (마감), `"cancelled"` (취소). 기본값 `"ongoing"` |
 | `budget` | 원 단위 정수. 미공개/미확인이면 `None` |
 | `content` | HTML 태그 제거된 순수 텍스트. 공백/줄바꿈 정리 완료 상태 |
@@ -277,6 +277,7 @@ result = await scraper.collect(days=30)
 | `Subsidy24Collector` | `DATA_GO_KR_KEY` | 보조금24 |
 | `KstartupCollector` | `DATA_GO_KR_KEY` | K-Startup |
 | `SmesCollector` | `DATA_GO_KR_KEY` | 중소벤처기업부 |
+| `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0) |
 | `GenericScraper` | (없음) | config만 필요 |
 
 (공기업 API 5종·중소벤처24는 미구현 — bid-collectors `work_log/plan.md` '이후 단계')
@@ -285,7 +286,7 @@ result = await scraper.collect(days=30)
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.1.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.2.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

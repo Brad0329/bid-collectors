@@ -93,7 +93,8 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   | F-007 | GenericScraper — config 기반 HTML 게시판 수집 | 완료 (실패·절단 보고·요청 훅 Phase 004) |
   | F-008 | 상세 조회 fetch_detail | 완료 |
   | F-009 | 공통 유틸(날짜·HTML·상태·HTTP) | 완료 |
-  | **다음 번호** | **F-010** | |
+  | F-010 | 알리오 공공기관 입찰공고 수집 | 완료 (2026-09-24, v1.2.0) |
+  | **다음 번호** | **F-011** | |
 
 ## 검증 원칙
 - **"됐다"는 실제 결과로 판단한다.** 테스트 통과·import 성공은 수집이 된다는 근거가 아니다.

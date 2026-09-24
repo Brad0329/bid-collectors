@@ -151,6 +151,21 @@
   - [x] `create_client`: User-Agent·타임아웃 기본값, 리다이렉트 추적, transport 인자(verify 등)를 transport로 전달 → `test_http.py`
 - **상태**: 완료
 
+### F-010: 알리오 공공기관 입찰공고 수집 (`AlioCollector`)
+- **설명**: 알리오 입찰공고 화면이 부르는 공개 JSON(`GET alio.go.kr/occasional/findBidList.json`, 인증 없음, 10건/페이지,
+  공고일 최신순). 서버 날짜 필터가 없어 기준일보다 오래된 공고가 나오면 멈춘다. **API 키 불필요.**
+  bid_no = `ALIO-{seq}`, organization = 공고 기관(`pname`), 상세 = `bidDtl.do?seq=`. 자체조달 공기업 공고를 받기 위해
+  (bidwatch `docs/procurement_sources_research.md` 3-1). fetch_detail은 None(목록에 본문 없음 — 필요해지면 추가).
+- **수용 기준**:
+  - [x] 항목 → Notice(제목 공백 정리·기관·공고일·마감일·상태·상세 URL) → `test_item_maps_to_notice`
+  - [x] API 키 없이 생성된다 → `test_no_api_key_needed`
+  - [x] 기준일보다 오래된 항목에서 멈추고 그 뒤와 다음 페이지를 받지 않는다 → `test_stops_at_cutoff_without_next_page`·`test_continues_to_next_page_until_cutoff`
+  - [x] 1페이지 실패는 0건 + errors, 2페이지 실패(status≠success 포함)는 1페이지 보존 + errors → `test_first_page_failure_*`·`test_second_page_failure_keeps_first_page`·`test_non_success_status_raises`
+  - [x] max_pages 상한 도달 시 절단 사실과 전체 건수를 errors에 → `test_max_pages_truncation_reported_with_total`
+  - [x] seq 없는 항목은 건너뛰고 건수를 errors에 → `test_item_without_seq_is_skipped_and_reported`
+  - [x] 실호출: 최근 3일 1건 이상, 필드 채워짐 → `test_real_api_returns_recent_notices`(integration, 2026-09-24 통과)
+- **상태**: 완료 (2026-09-24, v1.2.0)
+
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).
 2. **공개 범위**: 해당 없음 — 공개 표면은 파이썬 API(`docs/interface.md`)뿐이다. 단 **GenericScraper는 소비자가 넘긴

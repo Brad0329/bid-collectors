@@ -47,6 +47,7 @@
 ## 변경 이력 (최신이 위)
 | 날짜 | 변경안 (무엇을, 왜, 영향 범위, 버전) | 사용자 확인 | 반영 |
 |---|---|---|---|
+| 2026-09-24 | v1.2.0 — `AlioCollector` export 추가(알리오 공공기관 입찰공고, 공개 JSON `GET alio.go.kr/occasional/findBidList.json`, **API 키 불필요** — `GenericScraper`처럼 `__init__`에서 키 검사를 건너뛴다). `source="알리오"`, **`bid_no="ALIO-{seq}"`**, organization=공고 기관(`pname`). 이유: 자체조달 공기업(수자원·코레일·한전·LH…) 공고가 나라장터 API에 없고 알리오에 모인다(bidwatch `docs/procurement_sources_research.md` 3-1, 최근 100건 중 42건 나라장터에 없음). 영향: 추가만 — 기존 수집기·모델 불변. minor | ✅ 2026-09-24 (bidwatch 세션 — "전용 수집기 + 공공 출처" 선택) | |
 | 2026-09-23 | v1.1.0 신뢰성 — 페이지 실패·쿼터 초과·max_pages 절단을 `errors`/`is_partial`로 보고(기존 필드, 의미만 채움. errors 문자열의 API 키는 마스킹) · `GenericScraper(config, event_hooks=None)` 선택 인자 추가(httpx `event_hooks` 형식 그대로, session_init_url·페이지·health_check·리다이렉트 전부에 걸린다. `create_client`는 원래 `**kwargs`로 넘기던 것을 문서화) · 나라장터 확장 3메서드는 반환형 유지 — 재시도 소진 시 조용히 빈 결과 대신 예외(키 마스킹) · 내부: `_fetch`가 `(notices, pages, errors)` 3-튜플을 돌려줄 수 있다(2-튜플도 계속 받음, BidWatch는 상속하지 않음) — minor | ✅ 2026-09-23 (bidwatch 세션 합의 + 이 세션 확정) | `5af39f3` (bidwatch `67fe562` interface.md) |
 | 2026-04-13 | 나라장터 `fetch_detail` 스크래핑 제거 → None | ✅ | `1a037e3` |
 | 2026-04-11 | v1.0.0 — `GenericScraper`/`ScraperConfig` export, 나라장터 확장 3메서드, `fetch_detail` 추가 | ✅ | `3f21d98`·`714420e` |

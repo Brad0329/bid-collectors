@@ -190,6 +190,10 @@ class CollectResult(BaseModel):
 | 나라장터 한 서비스의 resultCode 에러(쿼터 초과 등) | 다른 서비스 결과 보존 | `"물품 ... 22 - LIMITED_NUMBER... — 물품 남은 기간 중단"` | True |
 | `max_pages` 상한에서 멈춤 | 상한까지 | `"max_pages=N 상한 도달로 중단 — 전체 M건 중 ..."` (GenericScraper는 전체 건수를 모름) | True |
 | GenericScraper 세션 초기화 실패·행 파싱 예외 | 수집된 것 | 원인 / `"행 파싱 예외로 N행 건너뜀"` | True |
+| (v1.2.4) API 수집기 항목의 필수 필드(ID·제목) 없음·null·형식 이상 | 그 항목만 빼고 보존 | `"항목 파싱 예외로 N건 건너뜀 — 필수 필드 없음: pblancId 3건, ValidationError: organization 1건 (응답 형식 변경 의심)"` (사유별 한 줄) | True |
+| (v1.2.4) GenericScraper 목록 행은 잡혔는데 추출 0건·기준일 이전 행 0건 (셀렉터가 낡음 — 사이트 개편 의심) | 그 페이지에서 멈춤 | `"페이지 N: 셀렉터 불일치 의심 — 목록 행 R개 중 추출 0건 (제목 없음 a행, 날짜 없음 b행, 파싱 예외 c행)"` | True |
+
+- 목록 행이 0개인 페이지는 빈 게시판과 구분할 수 없어 "공고가 0건 (정상)"으로 본다(셀렉터 불일치로 보고하지 않음).
 
 - **"사이트 장애"와 "공고 없음"은 errors로 구분한다** — v1.0.x에서는 둘 다 `[]`/False였다.
 - errors 문자열에서 API 키(`serviceKey`·`ServiceKey`·`crtfcKey` 값, 키 원문·URL 인코딩 형태)는 `***`로 가려진다 — 수집 이력 DB에 그대로 저장해도 된다.

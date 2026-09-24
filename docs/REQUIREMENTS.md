@@ -33,11 +33,14 @@
   - [x] (v1.1) 페이지 요청 실패는 앞 페이지 결과를 남기고 errors에 원인을 담는다 — 1페이지 실패면 0건 + errors(“장애”와 “공고 없음” 구분) → 수집기별 `test_*_error_graceful`·`test_http_error_returns_empty`·`test_second_page_*`
   - [x] (v1.1) `max_pages` 상한에서 멈추면 잘렸다는 사실과 전체 건수를 errors로 알린다(기업마당·K-Startup·보조금24·중소벤처기업부) → 수집기별 `test_max_pages_truncation_reported`
   - [x] (v1.1) errors·health_check 메시지에 API 키(쿼리 파라미터 값·원문·URL 인코딩)가 실리지 않는다 → `TestMaskSecret` 2건·`test_exception_message_key_masked`·수집기별 `test_api_key_masked_in_errors`·`test_request_failure_masks_key`
-  - [ ] (v1.2.4, Phase 005) 2건 중 1건의 필드가 null·형식 이상이면 나머지 1건은 반환되고, 건너뛴 건수와 사유가 errors에 담긴다
-    (기업마당·K-Startup·보조금24·중소벤처기업부·나라장터 입찰공고 — 현재 기업마당·보조금24는 0건, 나머지는 errors 없이 1건) → 테스트 없음
-  - [ ] (v1.2.4, Phase 005) ID 필드가 없거나 빈 항목은 `{접두사}-`로 합쳐지지 않고 건너뛰어 errors에 보고된다(숫자 0은 유효 ID)
-    — 3건 입력 시 0건 + errors에 "필수 필드 없음" 사유 한 줄과 건수 3 → 테스트 없음
-  - [ ] (v1.2.4, Phase 005, F-007) GenericScraper: 목록 행이 잡혔는데 제목·날짜 추출 결과 공고 0건·cutoff 이전 행 0건이면 errors에 셀렉터 불일치 의심과 행 수 → 테스트 없음
+  - [x] (v1.2.4, Phase 005) 2건 중 1건의 필드가 null·형식 이상이면 나머지 1건은 반환되고, 건너뛴 건수와 사유가 errors에 담긴다
+    (기업마당·K-Startup·보조금24·중소벤처기업부·나라장터 입찰공고·알리오 — 종전 기업마당·보조금24는 0건, 나머지는 errors 없이 1건)
+    → `test_item_contract::test_null_title_skips_only_that_item`·`test_bad_format_skips_only_that_item`(수집기별 parametrize)
+  - [x] (v1.2.4, Phase 005) ID 필드가 없거나 빈 항목은 `{접두사}-`로 합쳐지지 않고 건너뛰어 errors에 보고된다(숫자 0은 유효 ID)
+    — 3건 입력 시 0건 + errors에 "필수 필드 없음" 사유 한 줄과 건수 3 → `test_item_contract::test_missing_id_items_are_not_merged`·`test_zero_id_is_valid`
+    (새 수집기 편입 강제: `test_every_collector_has_a_case`)
+  - [x] (v1.2.4, Phase 005, F-007) GenericScraper: 목록 행이 잡혔는데 제목·날짜 추출 결과 공고 0건·cutoff 이전 행 0건이면 errors에 셀렉터 불일치 의심과 행 수
+    (목록 행 0개는 빈 게시판과 구분 불가라 보고하지 않음) → `test_generic_scraper::TestSelectorMismatch` 4건
 
 ## 기능 요구사항
 

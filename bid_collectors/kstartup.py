@@ -7,9 +7,10 @@ API: https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInfor
 
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector
+from .base import BaseCollector, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -36,6 +37,7 @@ class KstartupCollector(BaseCollector):
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
         total_count = 0
+        skips: Counter[str] = Counter()
 
         async with create_client(timeout=30.0) as client:
             page = 1
@@ -67,7 +69,11 @@ class KstartupCollector(BaseCollector):
                 total_count = data.get("totalCount", 0)
 
                 for item in items:
-                    notice = _item_to_notice(item, cutoff)
+                    try:
+                        notice = _item_to_notice(item, cutoff)
+                    except Exception as e:
+                        self._record_skip(skips, e, item)
+                        continue
                     if notice is not None:
                         notices.append(notice)
 
@@ -81,6 +87,9 @@ class KstartupCollector(BaseCollector):
                 )
                 logger.warning(f"[K-Startup] {msg}")
                 errors.append(msg)
+
+        if skip_msg := self._skip_message(skips):
+            errors.append(skip_msg)
 
         return notices, pages_processed, errors
 
@@ -183,9 +192,12 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
     # 상태: API 필드 우선, 없으면 날짜 기반 판정
     status = "ongoing" if item.get("rcrt_prgs_yn") == "Y" else "closed"
 
-    title = clean_html(item.get("biz_pbanc_nm", ""))
+    # str() 전에 검사한다 — str(None)은 "None"이라 빈 ID가 "KSTARTUP-None"으로 통과한다
+    pblanc_sn = item.get("pbanc_sn")
+    title = clean_html(item.get("biz_pbanc_nm") or "")
+    require_fields(pbanc_sn=pblanc_sn, biz_pbanc_nm=title)
+    pblanc_sn = str(pblanc_sn)
     content = clean_html_to_text(item.get("pbanc_ctnt", "") or "")
-    pblanc_sn = str(item.get("pbanc_sn", ""))
 
     detail_url = item.get("detl_pg_url") or ""
     apply_url = item.get("biz_aply_url") or ""

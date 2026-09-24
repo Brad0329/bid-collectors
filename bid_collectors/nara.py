@@ -10,11 +10,12 @@
 import asyncio
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 
 from lxml import etree
 
-from .base import BaseCollector
+from .base import BaseCollector, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -101,6 +102,7 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     bid_no_raw = t("bidNtceNo")
+    require_fields(bidNtceNo=bid_no_raw, bidNtceNm=t("bidNtceNm"))
     bid_no_ver = t("bidNtceOrd")
     full_bid_no = f"{bid_no_raw}-{bid_no_ver}" if bid_no_ver else bid_no_raw
 
@@ -330,6 +332,7 @@ class NaraCollector(BaseCollector):
         notices: list[Notice] = []
         errors: list[str] = []
         pages_processed = 0
+        skips: Counter[str] = Counter()
 
         async with create_client(timeout=30.0) as client:
             for bid_type in bid_types:
@@ -374,15 +377,18 @@ class NaraCollector(BaseCollector):
                         for item in items:
                             try:
                                 notice = _item_to_notice(item, bid_type)
-                                notices.append(notice)
                             except Exception as e:
-                                logger.warning(f"[나라장터] 항목 파싱 실패: {e}")
+                                self._record_skip(skips, e, item)
+                                continue
+                            notices.append(notice)
 
                         # 다음 페이지 확인
                         if page * ROWS_PER_PAGE >= total:
                             break
                         page += 1
 
+        if skip_msg := self._skip_message(skips):
+            errors.append(skip_msg)
         return notices, pages_processed, errors
 
     async def _request_with_retry(self, client, operation, params, bid_type, base_url=None):

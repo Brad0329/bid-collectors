@@ -5,8 +5,12 @@ import re
 import time
 import logging
 from abc import ABC, abstractmethod
+from collections import Counter
 from datetime import datetime
 from urllib.parse import quote
+
+from lxml import etree
+from pydantic import ValidationError
 
 from .models import Notice, CollectResult
 
@@ -23,6 +27,32 @@ def mask_secret(text: str, secret: str | None = None) -> str:
         for form in {secret, quote(secret, safe=""), quote(secret)}:
             text = text.replace(form, "***")
     return text
+
+
+class MissingFieldError(ValueError):
+    """필수 필드가 없는 항목 — 건너뛰고 사유를 errors로 보고한다."""
+
+
+def require_fields(**fields) -> None:
+    """필수 필드가 None·빈 문자열(공백만 포함)이면 MissingFieldError.
+
+    숫자 0은 유효한 값이다 — `not value`로 보면 ID 0을 빠진 값으로 오판한다(CLAUDE.md '숫자 필드에 or 금지').
+    ID가 빠진 항목을 통과시키면 `{접두사}-`로 합쳐져 서로 다른 공고가 BidWatch upsert에서 한 행을 덮어쓴다.
+    """
+    missing = [name for name, value in fields.items()
+               if value is None or (isinstance(value, str) and not value.strip())]
+    if missing:
+        raise MissingFieldError("필수 필드 없음: " + ",".join(missing))
+
+
+def _skip_reason(e: Exception) -> str:
+    """건너뛴 사유 — 같은 원인이 한 줄로 모이도록 값이 아니라 종류·필드 이름으로 만든다."""
+    if isinstance(e, MissingFieldError):
+        return str(e)
+    if isinstance(e, ValidationError):
+        fields = sorted({".".join(str(p) for p in err["loc"]) for err in e.errors()})
+        return f"ValidationError: {','.join(fields)}"
+    return type(e).__name__
 
 
 class BaseCollector(ABC):
@@ -42,6 +72,26 @@ class BaseCollector(ABC):
 
     def _mask(self, text: str) -> str:
         return mask_secret(text, self.api_key)
+
+    def _record_skip(self, skips: Counter, e: Exception, item) -> None:
+        """항목 하나의 변환 실패를 센다 — 그 항목만 건너뛰고 수집은 계속한다(나머지 결과를 지우지 않는다).
+
+        합계는 _skip_message()로 errors에 싣는다. 로그만 남기면 소비자는 누락을 모른다.
+        """
+        reason = _skip_reason(e)
+        skips[reason] += 1
+        # XML 항목은 repr이 "<Element item at 0x…>"뿐이라 원문으로 남긴다
+        raw = etree.tostring(item, encoding="unicode") if isinstance(item, etree._Element) else repr(item)
+        logger.warning(f"[{self.source_name}] 항목 건너뜀: {reason} — {self._mask(raw)[:200]}",
+                       exc_info=not isinstance(e, MissingFieldError))
+
+    @staticmethod
+    def _skip_message(skips: Counter) -> str | None:
+        """건너뛴 항목의 사유별 건수 한 줄. 없으면 None."""
+        if not skips:
+            return None
+        reasons = ", ".join(f"{r} {n}건" for r, n in skips.most_common())
+        return f"항목 파싱 예외로 {sum(skips.values())}건 건너뜀 — {reasons} (응답 형식 변경 의심)"
 
     @abstractmethod
     async def _fetch(

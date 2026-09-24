@@ -16,7 +16,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector
+from .base import BaseCollector, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -52,7 +52,7 @@ class AlioCollector(BaseCollector):
         notices: list[Notice] = []
         errors: list[str] = []
         pages_processed = 0
-        skip_reasons: Counter[str] = Counter()
+        skips: Counter[str] = Counter()
         total_count = 0
         old_pages = 0  # 기준일 이후 항목이 없는 페이지가 연달아 몇 개인가
 
@@ -79,13 +79,8 @@ class AlioCollector(BaseCollector):
                 for item in items:
                     try:
                         notice = _item_to_notice(item)
-                    except MissingFieldError as e:
-                        logger.warning(f"[알리오] 항목 건너뜀: {e} — {item!r:.200}")
-                        skip_reasons[str(e)] += 1
-                        continue
                     except Exception as e:
-                        logger.warning(f"[알리오] 항목 파싱 실패: {e}", exc_info=True)
-                        skip_reasons[f"{type(e).__name__}"] += 1
+                        self._record_skip(skips, e, item)
                         continue
                     dated += 1
                     if notice.start_date < cutoff:
@@ -105,11 +100,8 @@ class AlioCollector(BaseCollector):
                 logger.warning(f"[알리오] {msg}")
                 errors.append(msg)
 
-        if skip_reasons:
-            reasons = ", ".join(f"{r} {n}건" for r, n in skip_reasons.most_common())
-            msg = f"항목 파싱 예외로 {sum(skip_reasons.values())}건 건너뜀 — {reasons} (응답 형식 변경 의심)"
-            logger.warning(f"[알리오] {msg}")
-            errors.append(msg)
+        if skip_msg := self._skip_message(skips):
+            errors.append(skip_msg)
         return notices, pages_processed, errors
 
     async def health_check(self) -> dict:
@@ -134,10 +126,6 @@ def _parse_response(body: dict) -> tuple[list[dict], int]:
     return data.get("result") or [], int(data.get("totalCnt") or 0)
 
 
-class MissingFieldError(ValueError):
-    """필수 필드가 없는 항목 — 비공식 JSON이라 필드 이름이 바뀌면 여기서 드러난다."""
-
-
 def _item_to_notice(item: dict) -> Notice:
     # 필수: seq(식별)·rtitle·pname·bdate — 2026-09-24 수집 474건에서 빈 값 0건이었다. 마감일은 10건 비어 있어 선택.
     # 공식 API가 없어(procurement_sources_research.md 3-1) 형식 변경을 이렇게라도 감지한다 — 건너뛰고 사유를 errors로.
@@ -145,11 +133,7 @@ def _item_to_notice(item: dict) -> Notice:
     title = " ".join((item.get("rtitle") or "").split())
     organization = (item.get("pname") or "").strip()
     start_str = parse_date(item.get("bdate") or "")
-    # seq는 숫자다 — `not seq`로 보면 0을 빠진 값으로 오판한다(CLAUDE.md '숫자 필드에 or 금지'와 같은 자리)
-    missing = [name for name, value in (("seq", seq is not None and seq != ""), ("rtitle", title),
-                                        ("pname", organization), ("bdate", start_str)) if not value]
-    if missing:
-        raise MissingFieldError("필수 필드 없음: " + ",".join(missing))
+    require_fields(seq=seq, rtitle=title, pname=organization, bdate=start_str)
     end_str = parse_date(item.get("bidInfoEndDt") or "")
     url = f"{DETAIL_URL}?seq={seq}"
     return Notice(

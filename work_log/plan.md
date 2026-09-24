@@ -53,7 +53,8 @@
      전체 URL이 들어간다. 지금도 `health_check()`가 `message: str(e)`로 키를 돌려줄 수 있고, 항목 1로 페이지 오류를 errors에 담으면
      `CollectResult.errors` → BidWatch 수집 이력 DB까지 키가 간다. 기록 전 키 마스킹 + 그것을 잡는 테스트.
   - 완료 조건: 전체 테스트 0 failed · REQUIREMENTS F-001·F-005·F-007의 미충족 기준 충족 + 테스트 대응 · BidWatch 쪽 연동 확인은 bidwatch 세션 몫
-- [ ] Phase 005: 항목 수준 조용한 실패 제거 — 필드 이상 1건이 결과를 지우거나 조용히 사라지지 않게 (F-001·F-003~F-007) — **계약 불변(errors 내용만 늘어남) → patch**
+- [x] Phase 005: 항목 수준 조용한 실패 제거 — 필드 이상 1건이 결과를 지우거나 조용히 사라지지 않게 (F-001·F-003~F-007) — **계약 불변(errors 내용만 늘어남) → patch**
+  (2026-09-25, v1.2.4 — 로그 없음(실패한 접근 없음). qa-tester 400 passed/0 failed(실 API 18건 포함, 실데이터 건너뜀·셀렉터 불일치 0건), BidWatch backend/tests 118 passed)
   - 출처: 2026-09-24 구조 리뷰(rebuild 사유 판정 — 전면 재작성 불요, R1~R3만 지금). 재현 스크립트 `scripts/_tmp/review_repro.py`(고정 응답, 코드 수정 없음).
     Phase 004는 **페이지** 단위 실패를 맞췄고 **항목** 단위는 수집기마다 4갈래로 남았다 — 알리오 v1.2.2가 한 곳만 고친 것이 "한쪽만 고쳐 재발"의 실례.
   - 트랙: 저위험. `BaseCollector`에 **비공개** 헬퍼만 추가하고 `_fetch` 시그니처·템플릿 구조·bid_no 형식은 그대로 — interface.md 변경 없음.
@@ -116,6 +117,10 @@
   `routers/sources.py`)에 `event_hooks={"request": [guard_request]}` 꽂기 ② v1.1부터 `is_partial`/errors가 채워진다 —
   보조금24 정기 수집은 이제 절단 보고 대신 정상 건수(1일 24건 수준)로 온다, GenericScraper는 max_pages 절단이 errors로 온다(기본 3페이지)
   ③ bidwatch venv에서 `pip install -e` 재실행(메타데이터가 1.0.0으로 남아 있음, 코드는 editable이라 이미 1.1.0)
+- **v1.2.4 항목 건너뜀·셀렉터 불일치 보고(bidwatch 세션 몫)** — `is_partial=True`가 늘어날 수 있다: 필수 필드(ID·제목) 빠진 항목은
+  "항목 파싱 예외로 N건 건너뜀 — 사유 n건", GenericScraper 행은 잡혔는데 0건이면 "페이지 N: 셀렉터 불일치 의심 — 목록 행 R개 …".
+  정기 수집에서 이 두 메시지를 수집 이력·알림에 어떻게 띄울지 확인(특히 셀렉터 불일치 = 손 설정 사이트 개편 신호).
+  bidwatch `docs/interface.md`·이 저장소 `docs/interface.md` §errors 표에 두 행 추가는 미반영(표 누락일 뿐 모순 아님 — 양쪽 저장소 동시 수정이라 사용자 결정)
 
 ## 보류 항목 (나중에 할 것)
 

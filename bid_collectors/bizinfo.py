@@ -7,9 +7,10 @@ API: https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do
 
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector
+from .base import BaseCollector, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -39,6 +40,7 @@ class BizinfoCollector(BaseCollector):
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
         total_cnt = 0
+        skips: Counter[str] = Counter()
 
         async with create_client(timeout=30.0) as client:
             page = 1
@@ -69,7 +71,11 @@ class BizinfoCollector(BaseCollector):
                 page_has_old = False
 
                 for item in items:
-                    notice = _item_to_notice(item, cutoff)
+                    try:
+                        notice = _item_to_notice(item, cutoff)
+                    except Exception as e:
+                        self._record_skip(skips, e, item)
+                        continue
                     if notice is None:
                         page_has_old = True
                         continue
@@ -91,6 +97,8 @@ class BizinfoCollector(BaseCollector):
                 logger.warning(f"[기업마당] {msg}")
                 errors.append(msg)
 
+        if skip_msg := self._skip_message(skips):
+            errors.append(skip_msg)
         return notices, pages_processed, errors
 
     async def health_check(self) -> dict:
@@ -138,8 +146,9 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
         except (ValueError, IndexError):
             pass
 
-    pblanc_id = item.get("pblancId", "")
-    title = item.get("pblancNm", "")
+    pblanc_id = item.get("pblancId")
+    title = item.get("pblancNm")
+    require_fields(pblancId=pblanc_id, pblancNm=title)
     url = item.get("pblancUrl", "")
 
     # 신청기간 파싱

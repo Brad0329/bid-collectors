@@ -297,7 +297,7 @@ class TestParseRows:
             _make_row("공고1", today) + _make_row("공고2", today)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, has_old, _ = scraper._parse_rows(html, cutoff)
+        notices, has_old, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 2
         assert notices[0].title == "공고1"
         assert notices[1].title == "공고2"
@@ -319,7 +319,7 @@ class TestParseRows:
             '</body></html>'
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "제목A"
 
@@ -333,7 +333,7 @@ class TestParseRows:
             _make_row("오래된공고", old_date) + _make_row("최근공고", recent_date)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, has_old, _ = scraper._parse_rows(html, cutoff)
+        notices, has_old, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "최근공고"
         assert has_old is True
@@ -344,7 +344,7 @@ class TestParseRows:
         scraper = self._get_scraper(skip_no_date=True, link_base="https://example.com")
         html = _make_html(_make_row("날짜없음", ""))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 0
 
     def test_skip_no_date_false(self):
@@ -353,7 +353,7 @@ class TestParseRows:
         scraper = self._get_scraper(skip_no_date=False, link_base="https://example.com")
         html = _make_html(_make_row("날짜없음", ""))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
         assert notices[0].title == "날짜없음"
 
@@ -367,26 +367,31 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("그리드공고", today), grid_id="gridData")
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 1
 
     def test_grid_selector_not_found(self):
         from datetime import datetime, timedelta
 
+        # 기준일 이내 날짜여야 한다 — 고정 날짜(종전 2026-04-10)는 cutoff에 걸려 그리드와 무관하게 0건으로 통과했다
         scraper = self._get_scraper(grid_selector="#missing")
-        html = _make_html(_make_row("공고", "2026-04-10"))
+        today = datetime.now().strftime("%Y-%m-%d")
+        html = _make_html(_make_row("공고", today))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
-        assert len(notices) == 0
+        scan = scraper._parse_rows(html, cutoff)
+        assert len(scan.notices) == 0
+        assert scan.rows == 0
 
     def test_no_title_skipped(self):
         from datetime import datetime, timedelta
 
         scraper = self._get_scraper(link_base="https://example.com")
-        html = _make_html("<tr><td>1</td><td></td><td>2026-04-10</td></tr>")
+        today = datetime.now().strftime("%Y-%m-%d")
+        html = _make_html(f"<tr><td>1</td><td></td><td>{today}</td></tr>")
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
-        assert len(notices) == 0
+        scan = scraper._parse_rows(html, cutoff)
+        assert len(scan.notices) == 0
+        assert (scan.rows, scan.no_title, scan.has_old) == (1, 1, False)
 
     def test_bid_no_format(self):
         from datetime import datetime, timedelta
@@ -395,7 +400,7 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("테스트공고", today))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert notices[0].bid_no.startswith("SCR-testsite-")
         assert len(notices[0].bid_no.split("-")) == 3
 
@@ -410,7 +415,7 @@ class TestParseRows:
         today = datetime.now().strftime("%Y-%m-%d")
         html = _make_html(_make_row("매핑테스트", today, "/detail/99"))
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         n = notices[0]
         assert n.source == "커스텀기관"
         assert n.organization == "커스텀기관"
@@ -428,7 +433,7 @@ class TestParseRows:
             _make_row("정상공고", today) + _make_row("정상공고2", today)
         )
         cutoff = datetime.now() - timedelta(days=30)
-        notices, _, _ = scraper._parse_rows(html, cutoff)
+        notices, *_ = scraper._parse_rows(html, cutoff)
         assert len(notices) == 2
 
 
@@ -833,6 +838,57 @@ class TestFailureAndTruncationReport:
         result = await scraper.collect(days=30, delay=0)
         assert len(result.notices) == 1
         assert result.errors == ["행 파싱 예외로 1행 건너뜀"]
+
+
+class TestSelectorMismatch:
+    """v1.2.4 R3 — 행은 잡혔는데 추출 0건·기준일 이전 행 0건이면 셀렉터 불일치 의심을 errors에 (사이트 개편 감지)."""
+
+    def _two_rows(self) -> str:
+        return _make_html(_make_row("공고1", _today(), "/d/1") + _make_row("공고2", _today(), "/d/2"))
+
+    @respx.mock
+    async def test_wrong_title_selector_reported(self):
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(200, text=self._two_rows())
+        result = await GenericScraper(
+            {**PAGED_CONFIG, "title_selector": "td.WRONG a"}
+        ).collect(days=30, delay=0)
+        assert len(result.notices) == 0
+        assert result.is_partial is True
+        assert len(result.errors) == 1
+        assert "셀렉터 불일치 의심" in result.errors[0]
+        assert "목록 행 2개" in result.errors[0]
+        assert "제목 없음 2행" in result.errors[0]
+
+    @respx.mock
+    async def test_wrong_date_selector_reported(self):
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(200, text=self._two_rows())
+        result = await GenericScraper(
+            {**PAGED_CONFIG, "date_selector": "td.WRONG"}
+        ).collect(days=30, delay=0)
+        assert len(result.notices) == 0
+        assert len(result.errors) == 1
+        assert "날짜 없음 2행" in result.errors[0]
+
+    @respx.mock
+    async def test_all_old_rows_not_reported(self):
+        """전부 기준일 이전이면 셀렉터는 맞다 — 정상 종료, errors 없음."""
+        from datetime import datetime, timedelta
+
+        old = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(
+            200, text=_make_html(_make_row("옛공고", old, "/d/1"))
+        )
+        result = await GenericScraper(PAGED_CONFIG).collect(days=30, delay=0)
+        assert len(result.notices) == 0
+        assert result.errors == []
+
+    @respx.mock
+    async def test_no_rows_not_reported(self):
+        """목록 행 자체가 0개면 빈 게시판과 구분할 수 없어 보고하지 않는다(2026-09-24 사용자 확정)."""
+        respx.get(MINIMAL_CONFIG["list_url"]).respond(200, text=_make_html(""))
+        result = await GenericScraper(PAGED_CONFIG).collect(days=30, delay=0)
+        assert len(result.notices) == 0
+        assert result.errors == []
 
 
 class TestEventHooks:

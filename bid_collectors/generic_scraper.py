@@ -14,7 +14,7 @@ import logging
 import re
 import time
 from datetime import date, datetime, timedelta
-from typing import Callable, Literal
+from typing import Callable, Literal, NamedTuple
 from urllib.parse import urljoin
 
 import httpx
@@ -28,6 +28,17 @@ from .utils.http import create_client
 from .utils.status import determine_status
 
 logger = logging.getLogger("bid_collectors")
+
+
+class _RowScan(NamedTuple):
+    """한 페이지 목록 행의 파싱 결과."""
+
+    notices: list[Notice]
+    has_old: bool   # 기준일 이전 행이 있었다
+    skipped: int    # 파싱 예외로 건너뛴 행
+    rows: int       # 목록 셀렉터에 잡힌 행
+    no_title: int   # 제목 셀렉터로 제목을 못 얻은 행
+    no_date: int    # 날짜가 없어 skip_no_date로 건너뛴 행
 
 
 # ─────────────────────────────────────────────
@@ -234,13 +245,23 @@ class GenericScraper(BaseCollector):
                 else:
                     text = resp.text
 
-                page_notices, has_old, page_skipped = self._parse_rows(text, cutoff)
-                all_notices.extend(page_notices)
-                skipped_rows += page_skipped
+                scan = self._parse_rows(text, cutoff)
+                has_old = scan.has_old
+                all_notices.extend(scan.notices)
+                skipped_rows += scan.skipped
                 pages_processed += 1
 
-                # 종료 조건
-                if not page_notices:
+                # 종료 조건 — 기준일 이내 공고가 없는 페이지에서 멈춘다(임계 1, 2026-09-24 사용자 확정)
+                if not scan.notices:
+                    # 행은 잡혔는데 추출도 0건·기준일 이전 행도 0건이면 "오래된 페이지"가 아니라 셀렉터가 낡은 것이다
+                    # (사이트 개편). 목록 행 자체가 0개면 빈 게시판과 구분할 수 없어 보고하지 않는다(2026-09-24 사용자 확정).
+                    if scan.rows and not scan.has_old:
+                        msg = (
+                            f"페이지 {page}: 셀렉터 불일치 의심 — 목록 행 {scan.rows}개 중 추출 0건 "
+                            f"(제목 없음 {scan.no_title}행, 날짜 없음 {scan.no_date}행, 파싱 예외 {scan.skipped}행)"
+                        )
+                        logger.warning(f"[{self.source_name}] {msg}")
+                        errors.append(msg)
                     break
 
                 # 요청 간격
@@ -325,42 +346,33 @@ class GenericScraper(BaseCollector):
 
         return self.config.list_url + pagination.replace("{page}", str(page))
 
-    def _parse_rows(
-        self,
-        html: str,
-        cutoff: datetime,
-    ) -> tuple[list[Notice], bool, int]:
-        """HTML을 파싱하여 Notice 리스트 반환.
-
-        Returns:
-            (notices 리스트, cutoff 이전 항목 존재 여부, 파싱 예외로 건너뛴 행 수)
-        """
+    def _parse_rows(self, html: str, cutoff: datetime) -> "_RowScan":
+        """HTML을 파싱하여 Notice 리스트와 행 집계를 반환한다(집계는 셀렉터 불일치 판정용)."""
         soup = BeautifulSoup(html, self.config.parser)
 
         # grid_selector 적용
         if self.config.grid_selector:
             container = soup.select_one(self.config.grid_selector)
             if not container:
-                return ([], False, 0)
+                return _RowScan([], False, 0, 0, 0, 0)
             rows = container.select(self.config.list_selector)
         else:
             rows = soup.select(self.config.list_selector)
 
         if not rows:
-            return ([], False, 0)
+            return _RowScan([], False, 0, 0, 0, 0)
 
         notices: list[Notice] = []
         has_old = False
-        skipped = 0
+        skipped = no_title = no_date = 0
 
         for row in rows:
             try:
-                # 제목 추출
+                # 제목 추출 — 제목 없는 행(헤더 등)은 정상적으로 있다. 건너뛰되 세어 둔다
                 title_el = row.select_one(self.config.title_selector)
-                if not title_el:
-                    continue
-                title = title_el.get_text(strip=True)
+                title = title_el.get_text(strip=True) if title_el else ""
                 if not title:
+                    no_title += 1
                     continue
 
                 # 날짜 추출
@@ -369,6 +381,7 @@ class GenericScraper(BaseCollector):
                 parsed_date = parse_date(date_text)
 
                 if parsed_date is None and self.config.skip_no_date:
+                    no_date += 1
                     continue
 
                 # cutoff 비교
@@ -415,7 +428,7 @@ class GenericScraper(BaseCollector):
                 skipped += 1
                 continue
 
-        return (notices, has_old, skipped)
+        return _RowScan(notices, has_old, skipped, len(rows), no_title, no_date)
 
     def _extract_link(self, title_el: Tag) -> str:
         """제목 요소에서 링크 추출."""

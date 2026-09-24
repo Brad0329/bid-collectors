@@ -1,0 +1,196 @@
+"""항목 수준 공통 계약 — 모든 API 수집기에 같은 시나리오를 돌린다 (v1.2.4, Phase 005 R1·R2).
+
+- 2건 중 1건의 필드가 null·형식 이상이면 나머지 1건은 반환되고, 건너뛴 건수와 사유가 errors 한 줄에 담긴다
+- ID가 없는 항목은 `{접두사}-`로 합쳐지지 않고 건너뛰어 사유별 한 줄 + 건수로 보고된다
+- 숫자 ID 0은 유효하다
+
+수집기별 복사 대신 한 곳에 둔 이유: 같은 결함을 한 수집기만 고치는 일이 3회 이상 반복됐다(debt-audit 2026-09-24).
+`test_every_collector_has_a_case`가 새 수집기를 이 목록에 강제로 편입시킨다.
+"""
+
+import inspect
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Callable
+
+import httpx
+import pytest
+import respx
+
+import bid_collectors
+from bid_collectors import (
+    AlioCollector, BaseCollector, BizinfoCollector, KstartupCollector,
+    NaraCollector, SmesCollector, Subsidy24Collector,
+)
+from bid_collectors import alio, bizinfo, kstartup, nara, smes, subsidy24
+
+TODAY = datetime.now()
+
+
+def _xml(items: list[dict]) -> bytes:
+    """None 값은 태그를 빼서 표현한다(XML에는 null이 없다)."""
+    body = "".join(
+        "<item>" + "".join(f"<{k}>{v}</{k}>" for k, v in it.items() if v is not None) + "</item>"
+        for it in items
+    )
+    return (f"<response><header><resultCode>00</resultCode></header><body><items>{body}</items>"
+            f"<totalCount>{len(items)}</totalCount></body></response>").encode()
+
+
+def _mock_bizinfo(items):
+    for it in items:
+        it["totCnt"] = len(items)
+    respx.get(bizinfo.API_URL).mock(return_value=httpx.Response(200, json={"jsonArray": items}))
+
+
+def _mock_kstartup(items):
+    respx.get(kstartup.API_URL).mock(return_value=httpx.Response(
+        200, json={"data": items, "totalCount": len(items), "matchCount": len(items)}))
+
+
+def _mock_subsidy24(items):
+    respx.get(subsidy24.API_URL).mock(return_value=httpx.Response(
+        200, json={"data": items, "totalCount": len(items), "matchCount": len(items)}))
+
+
+def _mock_smes(items):
+    respx.get(smes.API_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
+
+
+def _mock_nara(items):
+    respx.get(url__startswith=nara.BASE_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
+
+
+def _mock_alio(items):
+    def page(request):
+        result = items if request.url.params["pageNo"] == "1" else []
+        return httpx.Response(200, json={"status": "success", "data": {"result": result, "totalCnt": len(items)}})
+    respx.get(alio.API_URL).mock(side_effect=page)
+
+
+@dataclass
+class Case:
+    collector: Callable[[], BaseCollector]
+    mock: Callable[[list[dict]], None]
+    item: Callable[[object], dict]      # ID → 정상 항목
+    id_field: str
+    title_field: str
+    zero_id: object                     # 숫자 0 ID (JSON은 int, XML은 "0")
+    collect_kwargs: dict = field(default_factory=dict)
+    bad_format: dict | None = None      # 필수 필드가 아닌데 변환을 깨뜨리는 값(없으면 None)
+
+
+CASES = {
+    BizinfoCollector: Case(
+        lambda: BizinfoCollector(api_key="k"), _mock_bizinfo,
+        lambda i: {"pblancId": i, "pblancNm": f"공고{i}", "creatPnttm": TODAY.strftime("%Y-%m-%d"),
+                   "excInsttNm": "기관"},
+        "pblancId", "pblancNm", 0,
+        bad_format={"excInsttNm": None},  # 종전엔 pydantic 예외가 _fetch 밖으로 나가 앞 결과까지 0건
+    ),
+    KstartupCollector: Case(
+        lambda: KstartupCollector(api_key="k"), _mock_kstartup,
+        lambda i: {"pbanc_sn": i, "biz_pbanc_nm": f"공고{i}", "pbanc_rcpt_bgng_dt": TODAY.strftime("%Y%m%d"),
+                   "rcrt_prgs_yn": "Y"},
+        "pbanc_sn", "biz_pbanc_nm", 0,
+    ),
+    Subsidy24Collector: Case(
+        lambda: Subsidy24Collector(api_key="k"), _mock_subsidy24,
+        lambda i: {"서비스ID": i, "서비스명": f"서비스{i}", "소관기관명": "기관"},
+        "서비스ID", "서비스명", 0,
+        bad_format={"소관기관명": None},
+    ),
+    SmesCollector: Case(
+        lambda: SmesCollector(api_key="k"), _mock_smes,
+        lambda i: {"itemId": i, "title": f"공고{i}", "viewUrl": "https://example.com"},
+        "itemId", "title", "0",
+    ),
+    NaraCollector: Case(
+        lambda: NaraCollector(api_key="k"), _mock_nara,
+        lambda i: {"bidNtceNo": f"R{i}" if i != "0" else "0", "bidNtceOrd": "000", "bidNtceNm": f"공고{i}",
+                   "ntceInsttNm": "기관"},
+        "bidNtceNo", "bidNtceNm", "0",
+        collect_kwargs={"bid_types": ["용역"]},
+        bad_format={"asignBdgtAmt": "미정"},  # 종전엔 로그만 남기고 조용히 버렸다
+    ),
+    AlioCollector: Case(
+        AlioCollector, _mock_alio,
+        lambda i: {"seq": i, "rtitle": f"공고{i}", "pname": "기관", "bdate": TODAY.strftime("%Y.%m.%d")},
+        "seq", "rtitle", 0,
+        bad_format={"bdate": "날짜아님"},
+    ),
+}
+
+# HTML 행 단위라 "항목 필드"가 없다 — 행 예외·셀렉터 불일치는 test_generic_scraper가 따로 본다
+EXEMPT = {"GenericScraper"}
+
+PARAMS = [pytest.param(c, id=c.__name__) for c in CASES]
+
+
+def test_every_collector_has_a_case():
+    """새 수집기를 __all__에 넣으면 여기서 실패한다 — CASES에 추가하거나 EXEMPT에 이유와 함께 넣을 것."""
+    exported = {
+        obj for name in bid_collectors.__all__
+        if inspect.isclass(obj := getattr(bid_collectors, name))
+        and issubclass(obj, BaseCollector) and obj is not BaseCollector
+    }
+    covered = set(CASES) | {c for c in exported if c.__name__ in EXEMPT}
+    assert exported == covered
+
+
+async def _collect(case: Case, items: list[dict]):
+    with respx.mock:
+        case.mock(items)
+        return await case.collector().collect(days=1, **case.collect_kwargs)
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_null_title_skips_only_that_item(cls):
+    case = CASES[cls]
+    bad = case.item(2)
+    bad[case.title_field] = None
+    result = await _collect(case, [case.item(1), bad])
+
+    assert len(result.notices) == 1
+    assert result.is_partial is True
+    assert len(result.errors) == 1
+    assert "1건 건너뜀" in result.errors[0]
+    assert f"필수 필드 없음: {case.title_field} 1건" in result.errors[0]
+
+
+@pytest.mark.parametrize("cls", [p for p in PARAMS if CASES[p.values[0]].bad_format])
+async def test_bad_format_skips_only_that_item(cls):
+    case = CASES[cls]
+    bad = {**case.item(2), **case.bad_format}
+    result = await _collect(case, [case.item(1), bad])
+
+    assert len(result.notices) == 1
+    assert len(result.errors) == 1
+    assert "1건 건너뜀" in result.errors[0]
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_missing_id_items_are_not_merged(cls):
+    """ID 없는 3건 → `{접두사}-` 1건으로 합쳐지지 않고 0건 + 사유 한 줄에 건수 3."""
+    case = CASES[cls]
+    items = []
+    for i in range(3):
+        it = case.item(i + 1)
+        del it[case.id_field]
+        items.append(it)
+    result = await _collect(case, items)
+
+    assert result.total_fetched == 0
+    assert result.errors == [
+        f"항목 파싱 예외로 3건 건너뜀 — 필수 필드 없음: {case.id_field} 3건 (응답 형식 변경 의심)"
+    ]
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_zero_id_is_valid(cls):
+    case = CASES[cls]
+    result = await _collect(case, [case.item(case.zero_id)])
+
+    assert result.errors == []
+    assert len(result.notices) == 1
+    assert "0" in result.notices[0].bid_no.split("-")

@@ -7,9 +7,10 @@ Swagger: https://infuser.odcloud.kr/api/stages/44436/api-docs
 
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector
+from .base import BaseCollector, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -47,6 +48,7 @@ class Subsidy24Collector(BaseCollector):
         pages_processed = 0
         max_pages = kwargs.get("max_pages", 50)
         total_count = 0
+        skips: Counter[str] = Counter()
 
         async with create_client(timeout=30.0) as client:
             page = 1
@@ -82,8 +84,10 @@ class Subsidy24Collector(BaseCollector):
                 total_count = data.get("matchCount", 0)
 
                 for item in items:
-                    notice = _item_to_notice(item)
-                    if notice is None:
+                    try:
+                        notice = _item_to_notice(item)
+                    except Exception as e:
+                        self._record_skip(skips, e, item)
                         continue
                     if only_business and not _is_business_target(item):
                         continue
@@ -100,6 +104,8 @@ class Subsidy24Collector(BaseCollector):
                 logger.warning(f"[보조금24] {msg}")
                 errors.append(msg)
 
+        if skip_msg := self._skip_message(skips):
+            errors.append(skip_msg)
         return notices, pages_processed, errors
 
     async def health_check(self) -> dict:
@@ -123,12 +129,11 @@ class Subsidy24Collector(BaseCollector):
             return {"status": "error", "source": self.source_name, "message": self._mask(str(e)), "response_time_ms": ms}
 
 
-def _item_to_notice(item: dict) -> Notice | None:
-    """API 응답 항목을 Notice 모델로 변환."""
-    service_id = item.get("서비스ID", "")
-    title = item.get("서비스명", "")
-    if not service_id or not title:
-        return None
+def _item_to_notice(item: dict) -> Notice:
+    """API 응답 항목을 Notice 모델로 변환. 필수 필드가 없으면 MissingFieldError."""
+    service_id = item.get("서비스ID")
+    title = item.get("서비스명")
+    require_fields(서비스ID=service_id, 서비스명=title)
 
     deadline = item.get("신청기한", "")
     end_str = parse_date(deadline)
@@ -176,11 +181,12 @@ def _item_to_notice(item: dict) -> Notice | None:
 
 def _is_business_target(item: dict) -> bool:
     """기업 대상 서비스인지 판별."""
+    # null 필드가 join을 깨지 않게 — 이 함수는 항목 변환 try 밖에서 불린다
     check_fields = [
-        item.get("서비스명", ""),
-        item.get("지원대상", ""),
-        item.get("사용자구분", ""),
-        item.get("서비스분야", ""),
+        item.get("서비스명") or "",
+        item.get("지원대상") or "",
+        item.get("사용자구분") or "",
+        item.get("서비스분야") or "",
     ]
     text = " ".join(check_fields)
     return any(kw in text for kw in BUSINESS_KEYWORDS)

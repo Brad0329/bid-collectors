@@ -8,6 +8,7 @@ from unittest.mock import patch
 import httpx
 import respx
 
+from bid_collectors.base import MissingFieldError
 from bid_collectors.subsidy24 import (
     _item_to_notice,
     _is_business_target,
@@ -183,20 +184,21 @@ class TestItemToNotice:
         assert notice is not None
         assert notice.extra is None
 
-    def test_missing_service_id_returns_none(self):
-        """서비스ID 없으면 None 반환."""
+    # v1.2.4: 종전엔 None을 돌려 조용히 버렸다 — 이제 예외로 올려 _fetch가 건너뛴 건수·사유를 errors에 싣는다
+    def test_missing_service_id_raises(self):
         item = {**SAMPLE_ITEM, "서비스ID": ""}
-        assert _item_to_notice(item) is None
+        with pytest.raises(MissingFieldError, match="서비스ID"):
+            _item_to_notice(item)
 
-    def test_missing_service_name_returns_none(self):
-        """서비스명 없으면 None 반환."""
+    def test_missing_service_name_raises(self):
         item = {**SAMPLE_ITEM, "서비스명": ""}
-        assert _item_to_notice(item) is None
+        with pytest.raises(MissingFieldError, match="서비스명"):
+            _item_to_notice(item)
 
-    def test_missing_both_returns_none(self):
-        """서비스ID와 서비스명 모두 없으면 None."""
+    def test_missing_both_raises(self):
         item = {"지원내용": "test"}
-        assert _item_to_notice(item) is None
+        with pytest.raises(MissingFieldError, match="서비스ID,서비스명"):
+            _item_to_notice(item)
 
 
 # ---------------------------------------------------------------------------

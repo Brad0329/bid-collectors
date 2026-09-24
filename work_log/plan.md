@@ -132,7 +132,9 @@
   - 저위험 결함: K-Startup odcloud `code<0` 미검사·`totalCount` 사용(보조금24는 `matchCount`) / 보조금24 `신청기한` 기간 형식이면 시작일이 end_date로 /
     기업마당 날짜 형식 변경 시 cutoff 필터가 조용히 꺼짐 / 기업마당·K-Startup·보조금24 total이 문자열·null이면 TypeError로 전체 손실 /
     GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다")
-  - 일반 트랙: GenericScraper status를 게시일로 판정(어제 공고가 closed) · interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·
+  - **안 함(2026-09-25 사용자)**: GenericScraper status를 게시일로 판정(어제 공고가 closed) — 바꾸면 소비자 값이 바뀌는 일반 트랙인데,
+    BidWatch가 GenericScraper 공고의 상태 배지를 숨겨 쓰지 않는다. BidWatch가 이 status를 쓰기 시작하면 다시 연다.
+  - 일반 트랙: interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·
     429 재시도 nara에만 · `_fetch_extended` 부분 결과 보존 없음
   - 정리 Phase 후보: 중복 로직(페이지 루프·절단 문구 4종·cutoff 7곳·health_check 7벌·extra 비우기 9벌·금액 파싱 2갈래) /
     문서 복수 원본(버전 표기 CLAUDE.md·plan.md v1.1.0·interface.md v1.2.0 · plan.md·README에 알리오와 v1.2.x 기록 없음 · "v1.2=JSON 모드" 이름 충돌 ·

@@ -127,12 +127,16 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
             fname = t(f"ntceSpecFileNm{i}") or f"규격서{i}"
             attachments.append({"name": fname, "url": furl})
 
-    # 카테고리: 조달분류 우선, 없으면 물품분류
+    # 카테고리: 업무구분마다 분류 태그가 다르다 (2026-09-24 실측, 구분별 목록 첫 100건)
+    #   용역 = 공공조달분류 대 > 중 (100%) / 물품 = 세부품명 dtilPrdctClsfcNoNm (100%)
+    #   공사 = 주공종 mainCnsttyNm (26% — 나머지는 빈값)
+    # 종전 prdctClsfcNoNm·dtlPrdctClsfcNoNm은 목록 응답에 없는 태그라 물품 분류가 전부 빈값이었다.
     procure_large = t("pubPrcrmntLrgClsfcNm")
     procure_mid = t("pubPrcrmntMidClsfcNm")
-    cat_large = procure_large or t("prdctClsfcNoNm")
-    cat_medium = procure_mid or t("mtrlClsfcNoNm") or t("dtlPrdctClsfcNoNm")
-    category = f"{cat_large} > {cat_medium}" if cat_large and cat_medium else cat_large or cat_medium
+    if procure_large and procure_mid:
+        category = f"{procure_large} > {procure_mid}"
+    else:
+        category = procure_large or procure_mid or t("dtilPrdctClsfcNoNm") or t("mainCnsttyNm")
 
     # URL: API 제공 URL 우선, 없으면 폴백
     fallback_url = f"https://www.g2b.go.kr:8081/ep/invitation/publish/bidInfoDtl.do?bidno={bid_no_raw}&bidseq={bid_no_ver}"

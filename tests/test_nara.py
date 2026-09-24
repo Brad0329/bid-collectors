@@ -48,8 +48,8 @@ SAMPLE_ITEM_XML = """\
   <asignBdgtAmt>60000000</asignBdgtAmt>
   <bidMethdNm>제한경쟁</bidMethdNm>
   <cntrctMthdNm>총액계약</cntrctMthdNm>
-  <prdctClsfcNoNm>용역</prdctClsfcNoNm>
-  <dtlPrdctClsfcNoNm>학술연구</dtlPrdctClsfcNoNm>
+  <pubPrcrmntLrgClsfcNm>ICT 서비스</pubPrcrmntLrgClsfcNm>
+  <pubPrcrmntMidClsfcNm>ICT사업 컨설팅</pubPrcrmntMidClsfcNm>
   <dminsttNm>서울</dminsttNm>
   <ntceInsttOfclNm>홍길동</ntceInsttOfclNm>
   <ntceInsttOfclTelNo>02-1234-5678</ntceInsttOfclTelNo>
@@ -206,9 +206,29 @@ class TestItemToNotice:
         assert notice.attachments[1]["name"] == "첨부파일2.hwp"
 
     def test_category_combined(self):
+        """용역: 공공조달분류 대 > 중 (태그는 2026-09-24 실제 용역 목록 응답 기준)."""
         item = self._make_item()
         notice = _item_to_notice(item, "용역")
-        assert notice.category == "용역 > 학술연구"
+        assert notice.category == "ICT 서비스 > ICT사업 컨설팅"
+
+    def test_category_goods_uses_detail_product_name(self):
+        """물품: 세부품명(dtilPrdctClsfcNoNm) — 실제 물품 목록 응답의 태그."""
+        xml = (
+            "<item><bidNtceNo>1</bidNtceNo><bidNtceNm>휴머노이드로봇 구매</bidNtceNm>"
+            "<dtilPrdctClsfcNo>4898999903</dtilPrdctClsfcNo>"
+            "<dtilPrdctClsfcNoNm>휴머노이드로봇</dtilPrdctClsfcNoNm></item>"
+        )
+        notice = _item_to_notice(etree.fromstring(xml), "물품")
+        assert notice.category == "휴머노이드로봇"
+
+    def test_category_construction_uses_main_work_type(self):
+        """공사: 주공종(mainCnsttyNm) — 실제 공사 목록 응답의 태그."""
+        xml = (
+            "<item><bidNtceNo>2</bidNtceNo><bidNtceNm>맨홀추락방지시설 설치공사</bidNtceNm>"
+            "<mainCnsttyNm>상ㆍ하수도설비공사업</mainCnsttyNm></item>"
+        )
+        notice = _item_to_notice(etree.fromstring(xml), "공사")
+        assert notice.category == "상ㆍ하수도설비공사업"
 
     def test_extra_fields(self):
         item = self._make_item()

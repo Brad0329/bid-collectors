@@ -193,5 +193,8 @@ async def test_real_api_returns_recent_notices():
     """실호출 — 최근 3일 공고가 1건 이상, 필드가 채워져 온다."""
     result = await AlioCollector().collect(days=3, max_pages=5)
     assert result.notices, result.errors
+    # max_pages=5는 3일치에 못 닿아 절단 보고는 정상 — 그 외(항목 건너뜀 등 형식 변경 신호)는 실패로 본다
+    real = [e for e in result.errors if not e.startswith("max_pages=")]
+    assert real == [], f"수집 에러 발생: {real}"
     n = result.notices[0]
     assert n.bid_no.startswith("ALIO-") and n.title and n.organization and n.start_date

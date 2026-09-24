@@ -163,6 +163,9 @@
   - [x] 1페이지 실패는 0건 + errors, 2페이지 실패(status≠success 포함)는 1페이지 보존 + errors → `test_first_page_failure_*`·`test_second_page_failure_keeps_first_page`·`test_non_success_status_raises`
   - [x] max_pages 상한 도달 시 절단 사실과 전체 건수를 errors에 → `test_max_pages_truncation_reported_with_total`
   - [x] seq 없는 항목은 건너뛰고 건수를 errors에 → `test_item_without_seq_is_skipped_and_reported`
+  - [x] 필수 필드(seq·rtitle·pname·bdate)가 없거나 비었거나 날짜로 안 읽히면 건너뛰고 **사유(필드 이름)와 건수**를 errors에 —
+    공식 API가 없어 형식 변경을 감지하는 유일한 장치(2026-09-24, v1.2.2). seq 0은 유효, 마감일은 선택(실측 474건 중 10건 빈 값)
+    → `test_missing_required_field_is_skipped_with_reason`(6) · `test_seq_zero_is_a_valid_id` · `test_missing_deadline_is_kept`
   - [x] 실호출: 최근 3일 1건 이상, 필드 채워짐 → `test_real_api_returns_recent_notices`(integration, 2026-09-24 통과)
 - **상태**: 완료 (2026-09-24, v1.2.0)
 

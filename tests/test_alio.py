@@ -121,6 +121,50 @@ class TestFetch:
         assert "1건 건너뜀" in result.errors[0]
 
 
+class TestRequiredFields:
+    """비공식 JSON이라 필드 이름이 바뀌면 조용히 빈 공고가 저장되지 않고 errors로 드러나야 한다."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    @pytest.mark.parametrize("field,value", [
+        ("rtitle", None), ("rtitle", "   "), ("pname", None), ("pname", ""),
+        ("bdate", None), ("bdate", "날짜아님"),
+    ])
+    async def test_missing_required_field_is_skipped_with_reason(self, field, value):
+        broken = _item(99, 0)  # seq는 0이 아닌 값으로 — 0을 쓰면 "seq 없음"으로 먼저 걸려 검사 대상 필드를 못 본다
+        if value is None:
+            del broken[field]
+        else:
+            broken[field] = value
+        respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_body([_item(50, 0), broken])),
+            httpx.Response(200, json=_body([])),
+        ])
+        result = await AlioCollector().collect(days=1)
+        assert [n.bid_no for n in result.notices] == ["ALIO-50"]
+        assert result.is_partial is True
+        assert "1건 건너뜀" in result.errors[0] and field in result.errors[0]
+
+    def test_seq_zero_is_a_valid_id(self):
+        """숫자 0을 '없음'으로 오판하지 않는다."""
+        assert _item_to_notice(_item(0, 0)).bid_no == "ALIO-0"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_missing_deadline_is_kept(self):
+        """마감일은 원래 비어 오는 공고가 있다(474건 중 10건) — 버리면 안 된다."""
+        no_end = _item(60, 0)
+        del no_end["bidInfoEndDt"]
+        respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_body([no_end])),
+            httpx.Response(200, json=_body([])),
+        ])
+        result = await AlioCollector().collect(days=1)
+        assert [n.bid_no for n in result.notices] == ["ALIO-60"]
+        assert result.notices[0].end_date is None
+        assert result.is_partial is False
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_real_api_returns_recent_notices():

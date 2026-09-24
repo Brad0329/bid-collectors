@@ -12,6 +12,7 @@ API: GET https://alio.go.kr/occasional/findBidList.json?type=title&word=&pageNo=
 
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 
 from .base import BaseCollector
@@ -45,7 +46,7 @@ class AlioCollector(BaseCollector):
         notices: list[Notice] = []
         errors: list[str] = []
         pages_processed = 0
-        skipped = 0
+        skip_reasons: Counter[str] = Counter()
         total_count = 0
         reached_cutoff = False
 
@@ -71,9 +72,13 @@ class AlioCollector(BaseCollector):
                 for item in items:
                     try:
                         notice = _item_to_notice(item)
+                    except MissingFieldError as e:
+                        logger.warning(f"[알리오] 항목 건너뜀: {e} — {item!r:.200}")
+                        skip_reasons[str(e)] += 1
+                        continue
                     except Exception as e:
                         logger.warning(f"[알리오] 항목 파싱 실패: {e}", exc_info=True)
-                        skipped += 1
+                        skip_reasons[f"{type(e).__name__}"] += 1
                         continue
                     if notice.start_date and notice.start_date < cutoff:
                         reached_cutoff = True
@@ -89,8 +94,9 @@ class AlioCollector(BaseCollector):
                 logger.warning(f"[알리오] {msg}")
                 errors.append(msg)
 
-        if skipped:
-            msg = f"항목 파싱 예외로 {skipped}건 건너뜀"
+        if skip_reasons:
+            reasons = ", ".join(f"{r} {n}건" for r, n in skip_reasons.most_common())
+            msg = f"항목 파싱 예외로 {sum(skip_reasons.values())}건 건너뜀 — {reasons} (응답 형식 변경 의심)"
             logger.warning(f"[알리오] {msg}")
             errors.append(msg)
         return notices, pages_processed, errors
@@ -117,17 +123,30 @@ def _parse_response(body: dict) -> tuple[list[dict], int]:
     return data.get("result") or [], int(data.get("totalCnt") or 0)
 
 
+class MissingFieldError(ValueError):
+    """필수 필드가 없는 항목 — 비공식 JSON이라 필드 이름이 바뀌면 여기서 드러난다."""
+
+
 def _item_to_notice(item: dict) -> Notice:
-    seq = item["seq"]  # 없으면 식별이 안 된다 — 예외로 건너뛰고 건수를 보고한다
+    # 필수: seq(식별)·rtitle·pname·bdate — 2026-09-24 수집 474건에서 빈 값 0건이었다. 마감일은 10건 비어 있어 선택.
+    # 공식 API가 없어(procurement_sources_research.md 3-1) 형식 변경을 이렇게라도 감지한다 — 건너뛰고 사유를 errors로.
+    seq = item.get("seq")
+    title = " ".join((item.get("rtitle") or "").split())
+    organization = (item.get("pname") or "").strip()
     start_str = parse_date(item.get("bdate") or "")
+    # seq는 숫자다 — `not seq`로 보면 0을 빠진 값으로 오판한다(CLAUDE.md '숫자 필드에 or 금지'와 같은 자리)
+    missing = [name for name, value in (("seq", seq is not None and seq != ""), ("rtitle", title),
+                                        ("pname", organization), ("bdate", start_str)) if not value]
+    if missing:
+        raise MissingFieldError("필수 필드 없음: " + ",".join(missing))
     end_str = parse_date(item.get("bidInfoEndDt") or "")
     url = f"{DETAIL_URL}?seq={seq}"
     return Notice(
         source="알리오",
         bid_no=f"ALIO-{seq}",
-        title=" ".join((item.get("rtitle") or "").split()),
-        organization=(item.get("pname") or "").strip(),
-        start_date=start_str or None,
+        title=title,
+        organization=organization,
+        start_date=start_str,
         end_date=end_str or None,
         status=determine_status(end_str) if end_str else "ongoing",
         url=url,

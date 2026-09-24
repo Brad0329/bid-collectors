@@ -68,9 +68,16 @@
      재현: 제목·날짜 셀렉터가 틀리면 0건·errors 없음(`generic_scraper.py:359-372`의 continue는 세지 않음). 실례: bidwatch plan.md:100 손 설정 3곳이
      사이트 개편으로 낡은 것을 기준선 대조로만 발견 / bidwatch는 시험 수집에만 "날짜 파싱 50% 미만" 탈락을 두고 정기 수집엔 없다.
      **착수 시 사용자 확인**: 목록 행 자체가 0개인 경우(빈 게시판과 구분 불가)도 보고할지 — 기본안은 보고하지 않음.
+  4. **(debt-audit 흡수) R3와 한 몸 — GenericScraper 멈춤 조건의 정렬 가정** — `generic_scraper.py:243`은 한 페이지에 기준일 이내 0건이면 멈춘다
+     (옛 알리오의 임계 1과 같은 유형 — 5afbc99는 이 가정으로 472건을 조용히 놓쳤다). 셀렉터 불일치 0건도 같은 조건으로 멈추므로 R3가 둘을 구분해야 한다.
+     **착수 시 사용자 확인**: 임계를 1로 유지할지 2연속으로 올릴지(요청 수 = delay × BidWatch 사이트 39곳). 회귀 테스트는 뒤섞인 순서 픽스처(`test_alio::test_interleaved_old_item_does_not_stop_collection` 방식).
+  5. **(debt-audit 흡수) 헛통과 테스트** — `tests/test_generic_scraper.py:377,386`은 고정 날짜(2026-04-10)라 cutoff에 걸려 셀렉터·제목과 무관하게 0건으로 통과한다 —
+     상대 날짜로 바꾸고 변이 확인. R3와 같은 파일·경로.
+  6. **(debt-audit 흡수) 공통 계약 테스트** — R1·R2 완료 조건을 수집기별 복사 대신 `__all__`의 모든 수집기에 자동으로 도는 테스트로
+     (null 필드 1건·빈 ID·숫자 0 보존 — 0 오판 3회·한 수집기만 고침 3회 이상의 구조 강제). 새 수집기가 자동 편입돼야 한다.
   - 범위 밖(이유): `_fetch_extended`(낙찰·계약·사전규격)의 항목 건너뜀은 반환형 `list[Notice]`라 errors 채널이 없다(CONTRACT.md) — 로그만 유지, 바꾸면 major.
-  - 완료 조건: REQUIREMENTS '공통 계약'의 (v1.2.3) 기준 3개 충족 + 수집기별 "null 필드 1건·빈 ID"에서 **건수를 재는** 테스트(변이 확인) ·
-    전체 테스트 0 failed · 버전 1.2.2 → 1.2.3(`pyproject.toml`·`__init__.py`)
+  - 완료 조건: REQUIREMENTS '공통 계약'의 (v1.2.4) 기준 3개 충족 + 수집기별 "null 필드 1건·빈 ID"에서 **건수를 재는** 테스트(변이 확인) ·
+    전체 테스트 0 failed · 버전 1.2.3 → 1.2.4(`pyproject.toml`·`__init__.py` — 1.2.3은 알리오 누락 수정 5afbc99가 썼다)
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
@@ -112,6 +119,18 @@
 ## 보류 항목 (나중에 할 것)
 
 > 조사만 하고 미룬 것을 여기 남긴다. **다시 조사하지 않아도 되도록 실측 결과와 근거까지** 적는다.
+
+- **debt-audit 2026-09-24 (5afbc99 반영본)** — 1군(GenericScraper 정렬 가정·헛통과 테스트·공통 계약 테스트)은 Phase 005에 흡수(위 4~6). 나머지는 **결정 대기**:
+  - 실측 필요: **기업마당 정렬 가정**(`bizinfo.py:81-84` "마지막 3건 전부 오래됨"에서 멈춤 — 5afbc99와 같은 유형, 실제 목록 순서 역전 수 미측정) ·
+    K-Startup `fetch_detail`의 `cond[pbanc_sn::EQ]`가 실제로 먹는지(응답 ID ≠ 요청 ID 검사 없음 — 무시되면 다른 공고 본문을 조용히 반환)
+  - 저위험 결함: K-Startup odcloud `code<0` 미검사·`totalCount` 사용(보조금24는 `matchCount`) / 보조금24 `신청기한` 기간 형식이면 시작일이 end_date로 /
+    기업마당 날짜 형식 변경 시 cutoff 필터가 조용히 꺼짐 / 기업마당·K-Startup·보조금24 total이 문자열·null이면 TypeError로 전체 손실 /
+    GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다")
+  - 일반 트랙: GenericScraper status를 게시일로 판정(어제 공고가 closed) · interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·
+    429 재시도 nara에만 · `_fetch_extended` 부분 결과 보존 없음
+  - 정리 Phase 후보: 중복 로직(페이지 루프·절단 문구 4종·cutoff 7곳·health_check 7벌·extra 비우기 9벌·금액 파싱 2갈래) /
+    문서 복수 원본(버전 표기 CLAUDE.md·plan.md v1.1.0·interface.md v1.2.0 · plan.md·README에 알리오와 v1.2.x 기록 없음 · "v1.2=JSON 모드" 이름 충돌 ·
+    훅 개수 · qa-tester.md 자리표시자 · status `cancelled` · F-008 상태 · CONTRACT.md 알리오 반영 칸 · pre_ready.md 구 번호)
 
 - **템플릿 규칙 위반 — 이식 시점(2026-09-23) 발견**. 조용한 실패·절단·session_init 무검사·행 파싱 예외 debug는 Phase 004에서 해소. 남은 것:
   - `nara.py` `_split_date_range`가 경계일을 두 범위에 겹쳐 넣는다 — `collect()`의 중복 제거가 흡수(의도적 유보, `Phase_002_review.md` §3).

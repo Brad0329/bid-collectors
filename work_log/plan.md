@@ -62,15 +62,16 @@
      재현: 기업마당(`bizinfo.py:72`)·보조금24(`subsidy24.py:85`)는 try가 없어 null 필드 1건에 **앞 페이지까지 0건**(pydantic 원문이 errors로) /
      나라장터(`nara.py:378`)·중소벤처(`smes.py:80`)는 로그만 남기고 버림 / 보조금24 `subsidy24.py:130`은 None 반환으로 조용히 버림 /
      K-Startup(`kstartup.py:70`)은 try 없음 — `clean_html`이 None을 흡수해 지금은 버틸 뿐. 알리오·GenericScraper는 이미 보고한다(헬퍼로 옮길지는 착수 시).
-  2. **R2 빈 ID 충돌** — 수집기별 필수 필드(최소 ID·제목)를 선언하고 빠지면 R1 경로로 건너뛰고 보고. 재현: `pblancId` 없는 3건 → `"BIZINFO-"`로 합쳐져 1건,
+  2. **R2 빈 ID 충돌** — 수집기별 필수 필드(최소 ID·제목)를 선언하고 빠지면 R1 경로로 건너뛰고 보고
+     (errors 형식 확정 2026-09-24 사용자: 항목별 줄이 아니라 사유별 한 줄 + 건수, 알리오 방식). 재현: `pblancId` 없는 3건 → `"BIZINFO-"`로 합쳐져 1건,
      errors 없음(BidWatch upsert에서 서로 다른 공고가 한 행을 덮어씀). 같은 자리: `kstartup.py:188`·`smes.py:139`·`nara.py:103`(입찰공고). 숫자 ID 0은 유효(알리오 교훈).
   3. **R3 GenericScraper 셀렉터 불일치 감지** — 목록 행은 잡혔는데 공고 0건·cutoff 이전 행 0건이면 "셀렉터 불일치 의심 — 행 N개 중 추출 0건"을 errors에.
      재현: 제목·날짜 셀렉터가 틀리면 0건·errors 없음(`generic_scraper.py:359-372`의 continue는 세지 않음). 실례: bidwatch plan.md:100 손 설정 3곳이
      사이트 개편으로 낡은 것을 기준선 대조로만 발견 / bidwatch는 시험 수집에만 "날짜 파싱 50% 미만" 탈락을 두고 정기 수집엔 없다.
-     **착수 시 사용자 확인**: 목록 행 자체가 0개인 경우(빈 게시판과 구분 불가)도 보고할지 — 기본안은 보고하지 않음.
+     **확정(2026-09-24 사용자)**: 목록 행 자체가 0개인 경우는 보고하지 않는다(빈 게시판과 구분 불가).
   4. **(debt-audit 흡수) R3와 한 몸 — GenericScraper 멈춤 조건의 정렬 가정** — `generic_scraper.py:243`은 한 페이지에 기준일 이내 0건이면 멈춘다
      (옛 알리오의 임계 1과 같은 유형 — 5afbc99는 이 가정으로 472건을 조용히 놓쳤다). 셀렉터 불일치 0건도 같은 조건으로 멈추므로 R3가 둘을 구분해야 한다.
-     **착수 시 사용자 확인**: 임계를 1로 유지할지 2연속으로 올릴지(요청 수 = delay × BidWatch 사이트 39곳). 회귀 테스트는 뒤섞인 순서 픽스처(`test_alio::test_interleaved_old_item_does_not_stop_collection` 방식).
+     **확정(2026-09-24 사용자)**: 임계는 1 유지(2연속은 요청 수 = delay × BidWatch 사이트 39곳이 늘어난다) — 셀렉터 불일치와 오래된 페이지의 구분만 한다. 회귀 테스트는 뒤섞인 순서 픽스처(`test_alio::test_interleaved_old_item_does_not_stop_collection` 방식).
   5. **(debt-audit 흡수) 헛통과 테스트** — `tests/test_generic_scraper.py:377,386`은 고정 날짜(2026-04-10)라 cutoff에 걸려 셀렉터·제목과 무관하게 0건으로 통과한다 —
      상대 날짜로 바꾸고 변이 확인. R3와 같은 파일·경로.
   6. **(debt-audit 흡수) 공통 계약 테스트** — R1·R2 완료 조건을 수집기별 복사 대신 `__all__`의 모든 수집기에 자동으로 도는 테스트로

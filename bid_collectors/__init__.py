@@ -11,6 +11,7 @@ from .kstartup import KstartupCollector
 from .smes import SmesCollector
 from .alio import AlioCollector
 from .lh import LhCollector
+from .kogas import KogasCollector
 from .generic_scraper import GenericScraper, ScraperConfig
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "SmesCollector",
     "AlioCollector",
     "LhCollector",
+    "KogasCollector",
     "GenericScraper",
     "ScraperConfig",
 ]

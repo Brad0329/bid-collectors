@@ -21,10 +21,10 @@ import respx
 
 import bid_collectors
 from bid_collectors import (
-    AlioCollector, BaseCollector, BizinfoCollector, KstartupCollector, LhCollector,
+    AlioCollector, BaseCollector, BizinfoCollector, KogasCollector, KstartupCollector, LhCollector,
     NaraCollector, SmesCollector, Subsidy24Collector,
 )
-from bid_collectors import alio, bizinfo, kstartup, lh, nara, smes, subsidy24
+from bid_collectors import alio, bizinfo, kogas, kstartup, lh, nara, smes, subsidy24
 
 TODAY = datetime.now()
 
@@ -72,6 +72,10 @@ def _mock_alio(items):
 
 def _mock_lh(items):
     respx.get(lh.API_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
+
+
+def _mock_kogas(items):
+    respx.get(kogas.API_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
 
 
 @dataclass
@@ -135,6 +139,12 @@ CASES = {
         lambda i: {"bidNum": i, "bidnmKor": f"공고{i}", "tndrbidRegDt": TODAY.strftime("%Y%m%d")},
         "bidNum", "bidnmKor", "0", "tndrdocAcptEndDtm",
         bad_format={"tndrbidRegDt": "날짜아님"},
+    ),
+    KogasCollector: Case(
+        lambda: KogasCollector(api_key="k"), _mock_kogas,
+        lambda i: {"NOTICE_CODE": i, "NOTICE_NAME": f"공고{i}", "NOTICE_DT": TODAY.strftime("%Y-%m-%d")},
+        "NOTICE_CODE", "NOTICE_NAME", "0", "END_DT",
+        bad_format={"NOTICE_DT": "날짜아님"},
     ),
 }
 

@@ -134,7 +134,8 @@
   (2026-09-25 — 로그 없음(실패한 접근 없음, 착수 시 확인 3건 모두 "삭제/교체 대상 없음"). `d157609`·`17a044b` · handover `docs/handover/v1.3.1.md` —
   단위 438 passed·ruff 통과 / 변이 6건 전부 잡힘(`scripts/_tmp/mutate_phase008.py`) / 실측(`phase008_probe.py`): 계약 공사 1일 0 → 61건(건너뜀 61 → 0),
   제목 태그 용역 cntrctNm 100/100·물품 40/40·공사 cnstwkNm 61/61, K-Startup matchCount 230·totalCount 30,168 요청 4→3회 228건 동일, 잘못된 키 403 → errors·마스킹 /
-  qa-tester 합격 460 passed/0 failed(실호출 22건) + 계약 공사 1일 62건(원문과 일치)·3일 10,572건 / BidWatch `backend/tests` 130 passed(읽기·실행만))
+  qa-tester 합격 460 passed/0 failed(실호출 22건) + 계약 공사 1일 62건(원문과 일치)·3일 10,572건 / BidWatch `backend/tests` 130 passed(읽기·실행만) /
+  bidwatch 반영 확인 2026-09-25 — handover §5, 남은 것 없음)
   - 출처: bidwatch `docs/source_fields.md` 부록 A(2026-09-25 필드 사전 조사, 요청서 `docs/requests/bid-collectors_alio_fetch_detail.md` §4). 발급 2026-09-25 사용자.
     부록 A의 나머지 #2·#5·#6·#7·#8은 BidWatch가 받는 표준 필드 값(end_date·budget·region·organization·status)이 바뀌어 **일반 트랙** — 원칙 ② Phase에 합친다(이 Phase 범위 밖).
   - 트랙: 저위험. BidWatch가 받는 값이 바뀌는 것은 #1(쓰지 않는 확장 메서드 `collect_contracts`)뿐 → handover는 참고 수준 한 장.
@@ -152,6 +153,11 @@
   - 완료 조건: 1·4 테스트 대응(변이 확인)·#1·#9 실측(표본 수 기록) · 전체 테스트 0 failed · 버전 1.3.1(`pyproject.toml`·`__init__.py`) · handover `docs/handover/v1.3.1.md`(계약 공사 수집 재개 + K-Startup 요청 수 변화) · REQUIREMENTS F-002·F-003 기준 추가.
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
+
+- **원칙 ② Phase(일반 트랙)** — 표준 필드 파생 제거 + bidwatch 필드 사전 부록 A 남은 #2·#5·#6·#7·#8(end_date·budget·region·organization·status).
+  **#6(공사 지역)·#8(취소)은 bidwatch가 이미 `extra` 원문으로 처리 중** — 표준 필드를 바꿀 때 handover에 바뀐 값·조건을 적어 bidwatch 로직과 맞춘다(2026-09-25 bidwatch 요청).
+- **자체조달 기관 수집기** — 요청서 `bidwatch/docs/requests/bid-collectors_institution_collectors.md`(2026-09-25). ① 조사(기관별 실호출·인증·호출 수·알리오 연결 키) →
+  사용자가 구현 기관 선택 → ② 구현. 조사 결과는 `docs/institution_sources.md`.
 
 - **v1.2 JSON API 모드** — 설계 `docs/generic_scraper.md` §8-1(`api_mode="json"`). 그 뒤 전용 사이트:
   창조경제혁신센터 7개 지역 · 부산창업포탈 · 한국예탁결제원 · 창조경제혁신센터 지원사업(lets_portal 전용 수집기 — `docs/dev_reference.md` §8).
@@ -190,7 +196,6 @@
 > 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
 > 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
 
-- **v1.3.1 부록 A 저위험 5건(bidwatch 세션 몫)** — `docs/handover/v1.3.1.md`. 코드 할 일 없음, `docs/source_fields.md` 부록 A 해소 표시·`pip install -e` 재실행. 반영 확인은 그 문서 §5.
 - **v1.3.0 알리오 fetch_detail(bidwatch 세션 몫)** — `docs/handover/v1.3.0.md`. `SKIP_DETAIL_TYPES`·병합 조건(0 버림·빈 첨부 "조회함" 표시)·
   팝업 첨부·원문 링크(onbid 포함)·interface.md 교체. §5 반영 기록됨(2026-09-25) — 남은 것: 팝업 화면 사용자 실테스트(bidwatch plan.md).
 - **v1.2.5 extra 원문 전부·확장 3메서드 빈 ID·선택 필드 null(bidwatch 세션 몫)** — `docs/handover/v1.2.5.md`. NoticeModal 키 26개 대응·interface.md 교체·

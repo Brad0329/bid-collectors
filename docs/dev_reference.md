@@ -21,7 +21,7 @@ backend/
 │   ├── base.py                 BaseCollector (공통 UPSERT)
 │   ├── nara.py                 나라장터 API
 │   ├── kstartup.py             K-Startup API
-│   ├── mss_biz.py              중소벤처기업부 API
+│   ├── mss_biz.py              중소벤처기업부 API (bid-collectors에서는 smes.py)
 │   ├── ccei.py                 CCEI 지원사업 JSON API
 │   ├── generic_scraper.py      범용 HTML 스크래퍼 (48개 사이트)
 │   └── scraper_configs.json    38개 사이트 스크래핑 설정

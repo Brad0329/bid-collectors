@@ -10,12 +10,12 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
 from .utils.status import determine_status
-from .utils.text import clean_html_to_text
+from .utils.text import as_text, clean_html_to_text
 
 logger = logging.getLogger("bid_collectors")
 
@@ -135,58 +135,42 @@ def _item_to_notice(item: dict) -> Notice:
     title = item.get("서비스명")
     require_fields(서비스ID=service_id, 서비스명=title)
 
-    deadline = item.get("신청기한", "")
+    # 선택 필드는 null·타입 이상이어도 항목을 버리지 않는다(v1.2.5 B) — 원문은 extra에 그대로 남는다
+    deadline = as_text(item.get("신청기한"))
     end_str = parse_date(deadline)
 
     # 상세조회URL이 있으면 사용, 없으면 보조금24 기본 URL
-    detail_url = item.get("상세조회URL", "")
+    detail_url = as_text(item.get("상세조회URL"))
     url = detail_url or f"https://www.gov.kr/portal/rcvfvrSvc/dtlEx/{service_id}"
 
     content_parts = []
-    if item.get("서비스목적요약"):
-        content_parts.append(item["서비스목적요약"])
-    if item.get("지원내용"):
-        content_parts.append(clean_html_to_text(item["지원내용"]))
+    if summary := as_text(item.get("서비스목적요약")):
+        content_parts.append(summary)
+    if detail := as_text(item.get("지원내용")):
+        content_parts.append(clean_html_to_text(detail))
     content = "\n".join(content_parts)
 
     return Notice(
         source="보조금24",
         bid_no=f"GOV24-{service_id}",
         title=title,
-        organization=item.get("소관기관명", ""),
+        organization=as_text(item.get("소관기관명")),
         start_date=None,
         end_date=end_str or None,
         status=determine_status(end_str) if end_str else "ongoing",
         url=url,
         detail_url=detail_url,
         content=content,
-        category=item.get("서비스분야", ""),
-        extra={
-            k: v for k, v in {
-                "support_type": item.get("지원유형", ""),
-                "target": item.get("지원대상", ""),
-                "selection_criteria": item.get("선정기준", ""),
-                "apply_method": item.get("신청방법", ""),
-                "deadline_raw": deadline,
-                "department": item.get("부서명", ""),
-                "agency_type": item.get("소관기관유형", ""),
-                "user_type": item.get("사용자구분", ""),
-                "reception_agency": item.get("접수기관", ""),
-                "phone": item.get("전화문의", ""),
-                "view_count": item.get("조회수"),
-            }.items() if v is not None and v != ""
-        } or None,
+        category=as_text(item.get("서비스분야")),
+        extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 한국어 필드명 그대로
     )
 
 
 def _is_business_target(item: dict) -> bool:
-    """기업 대상 서비스인지 판별."""
-    # null 필드가 join을 깨지 않게 — 이 함수는 항목 변환 try 밖에서 불린다
-    check_fields = [
-        item.get("서비스명") or "",
-        item.get("지원대상") or "",
-        item.get("사용자구분") or "",
-        item.get("서비스분야") or "",
-    ]
-    text = " ".join(check_fields)
+    """기업 대상 서비스인지 판별.
+
+    어떤 값(null·숫자·list)에도 예외를 던지지 않는다 — 항목 변환 try 밖에서 불려, 여기서 예외가 나면
+    앞 페이지까지 결과 전체를 잃는다(v1.2.5 B).
+    """
+    text = " ".join(as_text(item.get(k)) for k in ("서비스명", "지원대상", "사용자구분", "서비스분야"))
     return any(kw in text for kw in BUSINESS_KEYWORDS)

@@ -16,7 +16,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -146,4 +146,5 @@ def _item_to_notice(item: dict) -> Notice:
         status=determine_status(end_str) if end_str else "ongoing",
         url=url,
         detail_url=url,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 종전엔 None
     )

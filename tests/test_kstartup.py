@@ -164,14 +164,17 @@ class TestItemToNotice:
         assert notice.status == "closed"
 
     def test_extra_fields(self):
-        """extra 딕셔너리에 추가 필드 포함."""
+        """v1.2.5 원칙 ①: extra는 응답 키 전부·원래 이름(영어 별칭 없음), 값 타입 그대로."""
         notice = _item_to_notice(SAMPLE_ITEM, self._cutoff())
         assert notice.extra is not None
-        assert notice.extra["target"] == "예비창업자"
-        assert notice.extra["apply_url"] == "https://apply.example.com"
-        assert notice.extra["contact"] == "02-1234-5678"
-        assert notice.extra["biz_year"] == "2026"
-        assert notice.extra["target_age"] == "만 39세 이하"
+        assert notice.extra["aply_trgt_ctnt"] == "예비창업자"
+        assert notice.extra["biz_aply_url"] == "https://apply.example.com"
+        assert notice.extra["prch_cnpl_no"] == "02-1234-5678"
+        assert notice.extra["biz_enyy"] == "2026"
+        assert notice.extra["biz_trgt_age"] == "만 39세 이하"
+        assert notice.extra["pbanc_sn"] == 12345  # int 그대로
+        assert set(notice.extra) == set(SAMPLE_ITEM)
+        assert "target" not in notice.extra
 
     def test_minimal_item(self):
         """최소 필드만 있는 항목도 에러 없이 변환."""
@@ -187,15 +190,15 @@ class TestItemToNotice:
         assert notice.organization == "창업진흥원"  # default fallback
         assert notice.url == ""
 
-    def test_missing_fields_no_extra(self):
-        """추가 필드 모두 비어있으면 extra는 None."""
+    def test_minimal_item_extra_is_raw_fields(self):
+        """v1.2.5: 추가 필드가 없어도 표준 필드로 옮긴 값이 원문 그대로 extra에 있다(종전엔 None)."""
         item = {
             "pbanc_sn": 99999,
             "biz_pbanc_nm": "최소 공고",
             "pbanc_rcpt_bgng_dt": START_RAW,
         }
         notice = _item_to_notice(item, self._cutoff())
-        assert notice.extra is None
+        assert notice.extra == item
 
     def test_organization_fallback_to_sprv_inst(self):
         """pbanc_ntrp_nm 없으면 sprv_inst에서 가져옴."""

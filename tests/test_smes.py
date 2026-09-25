@@ -186,11 +186,18 @@ class TestItemToNotice:
         assert str(notice.end_date) == "2026-04-30"
 
     def test_extra_fields(self):
+        """v1.2.5 원칙 ①: extra는 응답 태그 전부·원래 이름 — 반복 태그는 list."""
         item = self._make_item()
         notice = _item_to_notice(item)
         assert notice.extra is not None
-        assert notice.extra["budget_raw"] == "5,000,000원"
+        assert notice.extra["suptScale"] == "5,000,000원"
         assert notice.extra["writer"] == "중소벤처기업부"
+        assert notice.extra["fileName"] == ["공고문.hwp", "신청서.hwp"]
+        assert notice.extra["fileUrl"] == [
+            "https://www.mss.go.kr/download/file1.hwp", "https://www.mss.go.kr/download/file2.hwp",
+        ]
+        assert notice.extra["itemId"] == "MSS20260401001"  # 표준 필드로 옮긴 값도 원문 그대로
+        assert "budget_raw" not in notice.extra
 
     def test_empty_fields_handled_gracefully(self):
         """최소한의 필드만 있는 item도 에러 없이 변환."""

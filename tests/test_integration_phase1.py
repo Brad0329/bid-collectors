@@ -81,6 +81,35 @@ class TestNaraIntegration:
             assert notice.url, "url이 비어있음"
             assert notice.url.startswith("https://")
 
+    @pytest.mark.integration
+    async def test_extra_matches_raw_response(self):
+        """(v1.2.5 원칙 ①) 실응답 1페이지의 항목마다 extra 키 집합 == 비어 있지 않은 태그 집합 — 헬퍼를 쓰지 않고 독립 계산으로 잰다."""
+        from bid_collectors.nara import (
+            BID_SERVICES, ROWS_PER_PAGE, _item_to_notice, _parse_xml_items, _split_date_range,
+        )
+        from bid_collectors.utils.http import create_client
+
+        collector = NaraCollector()
+        start_dt, end_dt = _split_date_range(3)[0]
+        checked = 0
+        async with create_client(timeout=30.0) as client:
+            for bid_type, operation in BID_SERVICES.items():
+                params = {
+                    "serviceKey": collector.api_key, "inqryBgnDt": start_dt, "inqryEndDt": end_dt,
+                    "numOfRows": str(ROWS_PER_PAGE), "pageNo": "1", "inqryDiv": "1", "type": "xml",
+                }
+                resp = await collector._request_with_retry(client, operation, params, bid_type)
+                items, _ = _parse_xml_items(resp.content)
+                for item in items:
+                    expected = {el.tag for el in item if el.text and el.text.strip()}
+                    extra = _item_to_notice(item, bid_type).extra
+                    assert set(extra) == expected, (
+                        f"{bid_type} {item.findtext('bidNtceNo')}: 차이 {set(extra) ^ expected}"
+                    )
+                    checked += 1
+        assert checked > 0, "최근 3일 공고 0건 — 표본 없음"
+        print(f"\n[extra 실측] 나라장터 3서비스 1페이지 {checked}건 전부 extra == 비어 있지 않은 태그")
+
 
 # ---------------------------------------------------------------------------
 # 2. BizinfoCollector (기업마당) 통합 테스트
@@ -127,6 +156,7 @@ class TestBizinfoIntegration:
             assert notice.bid_no.startswith("BIZINFO-"), f"bid_no 형식 오류: {notice.bid_no}"
             assert notice.title, "title이 비어있음"
             assert notice.url, "url이 비어있음"
+            assert notice.extra and "pblancId" in notice.extra, "extra 원문이 비어 있음(v1.2.5 원칙 ①)"
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +204,7 @@ class TestSubsidy24Integration:
             assert notice.bid_no.startswith("GOV24-"), f"bid_no 형식 오류: {notice.bid_no}"
             assert notice.title, "title이 비어있음"
             assert notice.url, "url이 비어있음"
+            assert notice.extra and "서비스ID" in notice.extra, "extra 원문이 비어 있음(v1.2.5 원칙 ①)"
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +252,7 @@ class TestKstartupIntegration:
             assert notice.bid_no.startswith("KSTARTUP-"), f"bid_no 형식 오류: {notice.bid_no}"
             assert notice.title, "title이 비어있음"
             assert notice.url, "url이 비어있음"
+            assert notice.extra and "pbanc_sn" in notice.extra, "extra 원문이 비어 있음(v1.2.5 원칙 ①)"
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +300,7 @@ class TestSmesIntegration:
             assert notice.bid_no.startswith("MSS-"), f"bid_no 형식 오류: {notice.bid_no}"
             assert notice.title, "title이 비어있음"
             assert notice.url, "url이 비어있음"
+            assert notice.extra and "itemId" in notice.extra, "extra 원문이 비어 있음(v1.2.5 원칙 ①)"
 
 
 # ---------------------------------------------------------------------------

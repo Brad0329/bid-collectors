@@ -198,3 +198,20 @@ async def test_real_api_returns_recent_notices():
     assert real == [], f"수집 에러 발생: {real}"
     n = result.notices[0]
     assert n.bid_no.startswith("ALIO-") and n.title and n.organization and n.start_date
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_api_extra_matches_raw_items():
+    """(v1.2.5 원칙 ①) 실응답 1페이지(10건)의 항목마다 extra 키 집합 == 비어 있지 않은 키 집합 — 헬퍼를 쓰지 않고 독립 계산으로 잰다."""
+    from bid_collectors.utils.http import create_client
+
+    async with create_client(timeout=20.0) as client:
+        resp = await client.get(API_URL, params={"type": "title", "word": "", "pageNo": "1", "area": ""})
+        resp.raise_for_status()
+        items, _ = _parse_response(resp.json())
+    assert items, "알리오 1페이지가 비어 있음"
+    for item in items:
+        expected = {k for k, v in item.items() if v is not None and str(v).strip() != ""}
+        assert set(_item_to_notice(item).extra) == expected, f"seq={item.get('seq')}"
+    print(f"\n[extra 실측] 알리오 1페이지 {len(items)}건 전부 extra == 비어 있지 않은 키")

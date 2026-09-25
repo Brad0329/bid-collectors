@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from lxml import etree
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -183,12 +183,7 @@ def _item_to_notice(item: etree._Element) -> Notice:
         budget=budget,
         category=t("writerPosition"),
         attachments=attachments,
-        extra={
-            k: v for k, v in {
-                "budget_raw": budget_raw,
-                "writer": t("writer"),
-            }.items() if v is not None and v != ""
-        } or None,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 반복 태그 fileName·fileUrl은 list
     )
 
 

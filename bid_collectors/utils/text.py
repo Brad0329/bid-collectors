@@ -4,6 +4,17 @@ import html
 import re
 
 
+def as_text(value) -> str:
+    """표준 필드 파싱용 — None은 "", 문자열은 그대로, 그 밖의 값은 str()로.
+
+    선택 필드 하나의 타입 이상(null·숫자·list)이 항목 변환이나 항목 try 밖의 계산을 깨뜨리지 않게 한다(v1.2.5 B).
+    원문은 extra에 그대로 남으므로 여기서의 문자열화는 정보를 더하지 않는다.
+    """
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
 def clean_html(text: str) -> str:
     """HTML 엔티티 디코딩, <br> → 줄바꿈. 태그는 유지."""
     if not text:

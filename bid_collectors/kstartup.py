@@ -10,11 +10,11 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
-from .utils.text import clean_html, clean_html_to_text
+from .utils.text import as_text, clean_html, clean_html_to_text
 
 logger = logging.getLogger("bid_collectors")
 
@@ -175,8 +175,9 @@ class KstartupCollector(BaseCollector):
 def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
     """API 응답 항목을 Notice 모델로 변환. cutoff 이전이면 None."""
     # 날짜 파싱
-    start_raw = item.get("pbanc_rcpt_bgng_dt", "") or ""
-    end_raw = item.get("pbanc_rcpt_end_dt", "") or ""
+    # 선택 필드는 null·타입 이상이어도 항목을 버리지 않는다(v1.2.5 B) — 원문은 extra에 그대로 남는다
+    start_raw = as_text(item.get("pbanc_rcpt_bgng_dt"))
+    end_raw = as_text(item.get("pbanc_rcpt_end_dt"))
     start_str = parse_date(start_raw)
     end_str = parse_date(end_raw)
 
@@ -194,44 +195,30 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
 
     # str() 전에 검사한다 — str(None)은 "None"이라 빈 ID가 "KSTARTUP-None"으로 통과한다
     pblanc_sn = item.get("pbanc_sn")
-    title = clean_html(item.get("biz_pbanc_nm") or "")
-    require_fields(pbanc_sn=pblanc_sn, biz_pbanc_nm=title)
+    title = item.get("biz_pbanc_nm")
+    if isinstance(title, str):
+        title = clean_html(title)
+    require_fields(pbanc_sn=pblanc_sn, biz_pbanc_nm=title)  # 문자열이 아닌 제목은 아래 Notice에서 ValidationError → 형식 이상으로 건너뛴다
     pblanc_sn = str(pblanc_sn)
-    content = clean_html_to_text(item.get("pbanc_ctnt", "") or "")
+    content = clean_html_to_text(as_text(item.get("pbanc_ctnt")))
 
-    detail_url = item.get("detl_pg_url") or ""
-    apply_url = item.get("biz_aply_url") or ""
-    url = detail_url or apply_url or item.get("biz_gdnc_url") or ""
+    detail_url = as_text(item.get("detl_pg_url"))
+    apply_url = as_text(item.get("biz_aply_url"))
+    url = detail_url or apply_url or as_text(item.get("biz_gdnc_url"))
 
     return Notice(
         source="K-Startup",
         bid_no=f"KSTARTUP-{pblanc_sn}",
         title=title,
-        organization=item.get("pbanc_ntrp_nm") or item.get("sprv_inst") or "창업진흥원",
+        organization=as_text(item.get("pbanc_ntrp_nm")) or as_text(item.get("sprv_inst")) or "창업진흥원",
         start_date=start_str or None,
         end_date=end_str or None,
         status=status,
         url=url,
         detail_url=detail_url,
         content=content[:500] if content else "",
-        region=item.get("supt_regin") or "",
-        category=item.get("supt_biz_clsfc") or "",
-        extra={
-            k: v for k, v in {
-                "target": clean_html(item.get("aply_trgt_ctnt") or ""),
-                "apply_url": apply_url,
-                "contact": item.get("prch_cnpl_no") or "",
-                "apply_method": clean_html(
-                    item.get("aply_mthd_onli_rcpt_istc")
-                    or item.get("aply_mthd_vst_rcpt_istc")
-                    or item.get("aply_mthd_etc_istc")
-                    or ""
-                ),
-                "biz_year": item.get("biz_enyy") or "",
-                "target_age": item.get("biz_trgt_age") or "",
-                "department": clean_html(item.get("biz_prch_dprt_nm") or ""),
-                "excl_target": clean_html(item.get("aply_excl_trgt_ctnt") or ""),
-                "biz_name": clean_html(item.get("intg_pbanc_biz_nm") or ""),
-            }.items() if v is not None and v != ""
-        } or None,
+        region=as_text(item.get("supt_regin")),
+        category=as_text(item.get("supt_biz_clsfc")),
+        # 원문 전부(v1.2.5, 원칙 ①) — 대상·신청방법·담당부서 등은 응답 키 그대로, HTML도 원문 그대로(표시용 정리는 소비자 몫)
+        extra=raw_fields(item),
     )

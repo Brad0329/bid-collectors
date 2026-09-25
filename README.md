@@ -86,9 +86,8 @@ if detail:
 | 그 외 | X | None 반환 (미지원) |
 
 > **나라장터 참고**: data.go.kr API가 `bidNtceNo` 단건 조회를 지원하지 않으며,
-> 사업개요(content) 필드도 제공하지 않습니다. 대신 수집 시점에 평가비율(`tech_eval_ratio`,
-> `price_eval_ratio`), 낙찰방식(`award_method`), 조달분류, API 제공 상세 URL 등을
-> `Notice.extra`에 저장합니다.
+> 사업개요(content) 필드도 제공하지 않습니다. 대신 수집 시점에 목록 응답의 태그 전부(평가비율 `techAbltEvlRt`·
+> `bidPrceEvlRt`, 낙찰방식 `sucsfbidMthdNm`, 조달분류, 담당자 등)를 원래 이름 그대로 `Notice.extra`에 저장합니다(v1.2.5).
 
 ### GenericScraper (config 기반 HTML 스크래핑)
 
@@ -139,7 +138,7 @@ class Notice(BaseModel):
     region: str
     category: str
     attachments: list[dict] | None  # [{"name": "...", "url": "..."}, ...]
-    extra: dict | None   # 수집기별 추가 데이터
+    extra: dict | None   # 응답 항목 원문 전부, 원래 이름(v1.2.5 — docs/interface.md §1)
 ```
 
 ### CollectResult

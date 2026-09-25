@@ -33,14 +33,18 @@ class MissingFieldError(ValueError):
     """필수 필드가 없는 항목 — 건너뛰고 사유를 errors로 보고한다."""
 
 
+def _is_empty(value) -> bool:
+    """None·빈 문자열·공백만 = 비어 있음. 0·False·"0"은 값이다(CLAUDE.md '숫자 필드에 or 금지')."""
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
 def require_fields(**fields) -> None:
     """필수 필드가 None·빈 문자열(공백만 포함)이면 MissingFieldError.
 
     숫자 0은 유효한 값이다 — `not value`로 보면 ID 0을 빠진 값으로 오판한다(CLAUDE.md '숫자 필드에 or 금지').
     ID가 빠진 항목을 통과시키면 `{접두사}-`로 합쳐져 서로 다른 공고가 BidWatch upsert에서 한 행을 덮어쓴다.
     """
-    missing = [name for name, value in fields.items()
-               if value is None or (isinstance(value, str) and not value.strip())]
+    missing = [name for name, value in fields.items() if _is_empty(value)]
     if missing:
         raise MissingFieldError("필수 필드 없음: " + ",".join(missing))
 
@@ -53,6 +57,40 @@ def _skip_reason(e: Exception) -> str:
         fields = sorted({".".join(str(p) for p in err["loc"]) for err in e.errors()})
         return f"ValidationError: {','.join(fields)}"
     return type(e).__name__
+
+
+def _xml_to_dict(el: etree._Element) -> dict:
+    """자식 태그 → 텍스트(strip). 같은 태그가 반복되면 list, 자식이 있는 태그는 dict(재귀). 빈 값은 뺀다."""
+    out: dict = {}
+    for child in el:
+        if not isinstance(child.tag, str):  # 주석·처리 명령
+            continue
+        value = _xml_to_dict(child) if len(child) else (child.text.strip() if child.text else "")
+        if _is_empty(value) or value == {}:
+            continue
+        if child.tag in out:
+            prev = out[child.tag]
+            out[child.tag] = prev + [value] if isinstance(prev, list) else [prev, value]
+        else:
+            out[child.tag] = value
+    return out
+
+
+def raw_fields(item) -> dict | None:
+    """응답 항목의 비어 있지 않은 필드 전부를 원래 이름 그대로 — `Notice.extra`에 싣는다 (v1.2.5).
+
+    CONTRACT.md 설계 원칙 '숨기지도 더하지도 않는다'(2026-09-25): 이름을 바꾸거나 골라 담지 않는다 — 제외 목록도 손 매핑이라
+    두지 않으며, 표준 필드로 옮긴 값도 원문 그대로 다시 들어 있다. 요청 문맥(용역/물품 등)은 응답에 없으므로 여기 없다(bid_no 접두사).
+    - JSON dict: None·빈 문자열·공백만인 값은 뺀다. 0·False는 값이다. 중첩 값(dict·list)은 그대로.
+    - XML Element: 자식 태그 → 텍스트. 같은 태그가 2개 이상이면 list, 자식이 있는 태그는 dict.
+    """
+    if isinstance(item, etree._Element):
+        data = _xml_to_dict(item)
+    elif isinstance(item, dict):
+        data = {k: v for k, v in item.items() if not _is_empty(v)}
+    else:
+        raise TypeError(f"raw_fields: dict 또는 XML Element만 받는다 — {type(item).__name__}")
+    return data or None
 
 
 class BaseCollector(ABC):

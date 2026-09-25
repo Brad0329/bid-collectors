@@ -41,18 +41,22 @@
     (새 수집기 편입 강제: `test_every_collector_has_a_case`)
   - [x] (v1.2.4, Phase 005, F-007) GenericScraper: 목록 행이 잡혔는데 제목·날짜 추출 결과 공고 0건·cutoff 이전 행 0건이면 errors에 셀렉터 불일치 의심과 행 수
     (목록 행 0개는 빈 게시판과 구분 불가라 보고하지 않음) → `test_generic_scraper::TestSelectorMismatch` 4건
-  - [ ] (v1.2.5, Phase 006 B) 항목 하나의 값 이상(null·비문자열)이 항목 단위 계산 어디서 나도 결과 전체를 지우지 않는다 — 기업마당 `_is_within_cutoff`·
+  - [x] (v1.2.5, Phase 006 B) 항목 하나의 값 이상(null·비문자열)이 항목 단위 계산 어디서 나도 결과 전체를 지우지 않는다 — 기업마당 `_is_within_cutoff`·
     보조금24 `_is_business_target`는 어떤 값에도 예외를 던지지 않고, 선택 필드가 null인 항목은 건너뛰지 않고 그 필드만 비운 채 반환된다
-    (2건 중 1건의 선택 필드 null → 2건 반환, errors 없음) → 테스트 없음(착수 시 `test_item_contract::test_null_optional_field_keeps_item` 수집기별 + 함수 단위 2건)
+    (2건 중 1건의 선택 필드 null → 2건 반환, errors 없음) → `test_item_contract::test_null_optional_field_keeps_item`(6종) · `test_bizinfo::test_is_within_cutoff_never_raises`(6)·
+    `test_null_reqst_period_keeps_item` · `test_subsidy24::test_is_business_target_never_raises`(3)·`test_null_organization_keeps_item`.
+    형식 이상(제목이 list) 케이스는 `test_bad_format_skips_only_that_item`이 기업마당·K-Startup·보조금24·나라장터·알리오 5종에 돈다(중소벤처는 XML이라 값이 전부 문자열 — 만들 수 없음)
 - **원칙 — 숨기지도 더하지도 않는다 (2026-09-25 사용자 확정, 결정 기록 `docs/CONTRACT.md` 설계 원칙 첫 항목)**: 출처가 주는 것은 전부
   가져와 정확히 전달되는 형식으로 넘기고, 쓸지 말지는 BidWatch가 정한다. 아래 두 기준은 **모든 수집기(나라장터 확장 3메서드 포함)의 완료 기준**이다 —
-  새 수집기도 이 둘을 채워야 완료. 상태: ① **진행**(Phase 006, v1.2.5 — 2026-09-25 발급) / ② **미착수**(일반 트랙, Phase 미발급).
-  - [ ] (원칙 ①, v1.2.5 Phase 006) `extra`에 응답 항목의 비어 있지 않은 필드 전부가 원래 이름 그대로 담긴다 — 고정 응답의 비어 있지 않은 필드 수와 `extra` 키 수가
-    같고, 이름을 바꾼 키가 없다(기본안, 착수 시 확정: 0·False 포함, None·빈 문자열·공백만 제외, XML 반복 태그는 list, 요청 문맥 `bid_type`은 뺀다)
-    → 테스트 없음(착수 시 `test_item_contract::test_extra_has_every_nonempty_field`·`test_extra_keys_are_original_names` + 통합 1페이지 실측). 현재 위반(2026-09-25 실측, 최근 3일 1페이지 100건 표본, `scripts/_tmp/nara_field_coverage.py`):
-    나라장터 응답 태그 중 용역 113개의 41개·물품 101의 40·공사 143의 37만 읽음 / 영어로 이름을 바꾼 키(나라장터 12개 등 수집기마다) /
-    이름이 틀려 항상 빈값인 키 2개(`cntrctMthdNm`→실제 `cntrctCnclsMthdNm`, `bidQlftcRgstDt`→`bidQlfctRgstDt`) / 공사 배정예산 `bdgtAmt` 미수신 /
-    300건 중 0건인 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`)를 읽는 죽은 코드
+  새 수집기도 이 둘을 채워야 완료. 상태: ① **완료**(v1.2.5, Phase 006, 2026-09-25 — GenericScraper·`fetch_detail`은 범위 밖, plan.md 보류) / ② **미착수**(일반 트랙, Phase 미발급).
+  - [x] (원칙 ①, v1.2.5 Phase 006) `extra`에 응답 항목의 비어 있지 않은 필드 전부가 원래 이름 그대로 담긴다 — 고정 응답의 비어 있지 않은 필드 수와 `extra` 키 수가
+    같고, 이름을 바꾼 키가 없다(확정 2026-09-25 기본안: 0·False 포함, None·빈 문자열·공백만 제외, XML 반복 태그는 list·자식 있는 태그는 dict, 요청 문맥
+    `bid_type`·`data_type`은 뺀다 — bid_no 접두사에 있다, HTML 값도 원문 그대로) → `test_item_contract::test_extra_has_every_nonempty_field`·
+    `test_extra_keys_are_original_names`(6종 parametrize) · `test_raw_fields.py` 6건 · 통합 `TestNaraIntegration::test_extra_matches_raw_response`(3서비스 1페이지
+    300건, 2026-09-25)·`test_alio::test_real_api_extra_matches_raw_items`(10건). 해소된 종전 위반(2026-09-25 실측, `scripts/_tmp/nara_field_coverage.py`):
+    나라장터 응답 태그 중 용역 113개의 41개·물품 101의 40·공사 143의 37만 읽음 / 영어로 이름을 바꾼 키 / 이름이 틀려 항상 빈값인 키 2개(`cntrctMthdNm`·`bidQlftcRgstDt`) /
+    공사 배정예산 `bdgtAmt` 미수신(extra에는 담긴다 — `budget` 표준 필드 반영은 원칙 ②). 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`) 루프는 유지
+    (300건 중 0건이지만 무해 — 나타나면 attachments로 담긴다)
   - [ ] (원칙 ②) 표준 필드는 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수·기본 필터가 없다 → 테스트 없음.
     현재 위반(2026-09-25): `status`를 마감일로 추정(전 수집기 — 나라장터 취소공고 `ntceKindNm`가 ongoing으로 나감) · `budget` 배정예산→추정가격 대체(F-001) ·
     `category` 대>중 합성(F-001) · `region`에 수요기관명 `dminsttNm`(F-001) · content 500자 절단(F-003·F-006) · organization 상수(F-006 "중소벤처기업부",
@@ -87,10 +91,11 @@
   - [x] 계약: bid_no = `계약-{type}-{dcsnCntrctNo}` → `test_contracts_mapping`
   - [x] API 에러 응답 시 예외가 호출자에게 그대로 전파된다(부분 결과 없음 — 반환형이 list라 errors를 담을 곳이 없다, CONTRACT.md) → `test_api_error_propagates`
   - [x] (v1.1) 요청 재시도 소진도 조용한 빈 결과가 아니라 `RuntimeError`, 메시지에 키 없음 → `test_request_failure_raises_masked`
-  - [ ] (v1.2.5, Phase 006 A) ID(낙찰 `bidNtceNo`·계약 `dcsnCntrctNo`|`untyCntrctNo`·사전규격 `bfSpecRgstNo`|`refNo`)나 제목(낙찰 `bidNtceNm`·계약 `cntrctNm`)이 없는 항목은
+  - [x] (v1.2.5, Phase 006 A) ID(낙찰 `bidNtceNo`·계약 `dcsnCntrctNo`|`untyCntrctNo`·사전규격 `bfSpecRgstNo`|`refNo`)나 제목(낙찰 `bidNtceNm`·계약 `cntrctNm`)이 없는 항목은
     `낙찰-용역-`처럼 접두사만으로 합쳐지지 않고 건너뛴다 — 3건 입력 시 0건, 경고 로그에 사유별 건수(반환형이 list라 errors 채널 없음 — CONTRACT.md)
-    → 테스트 없음(착수 시 `TestNaraExtended` 3건, caplog)
-- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23)
+    → `TestNaraExtended::test_awards_without_id_are_skipped_not_merged`·`test_contracts_without_id_are_skipped_not_merged`·`test_pre_specs_without_id_are_skipped_not_merged`(caplog)
+  - [x] (v1.2.5, 원칙 ①) 확장 3메서드의 `extra`도 응답 태그 전부·원래 이름(`bid_type`·`data_type` 없음) → `test_awards_mapping`
+- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23, 빈 ID 병합 방지·원문 extra 2026-09-25 v1.2.5)
 
 ### F-003: K-Startup 사업공고 수집 (`KstartupCollector`)
 - **설명**: odcloud 형식 JSON. 접수시작일이 cutoff(자정 절삭) 이전이면 제외. `only_ongoing=True`(기본)면

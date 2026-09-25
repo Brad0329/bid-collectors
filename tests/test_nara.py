@@ -1,5 +1,6 @@
 """나라장터 수집기(nara.py) 단위 테스트."""
 
+import logging
 import os
 import pytest
 from unittest.mock import patch, AsyncMock
@@ -193,8 +194,9 @@ class TestItemToNotice:
         # budget = asignBdgtAmt (60000000), est_price = presmptPrce (50000000)
         # notice.budget = budget or est_price → 60000000
         assert notice.budget == 60000000
-        assert notice.extra["budget"] == 60000000
-        assert notice.extra["est_price"] == 50000000
+        # 원문 extra(v1.2.5): 태그 이름 그대로, 값은 텍스트
+        assert notice.extra["asignBdgtAmt"] == "60000000"
+        assert notice.extra["presmptPrce"] == "50000000"
 
     def test_attachments_parsing(self):
         item = self._make_item()
@@ -231,14 +233,17 @@ class TestItemToNotice:
         assert notice.category == "상ㆍ하수도설비공사업"
 
     def test_extra_fields(self):
+        """v1.2.5 원칙 ①: extra는 응답 태그 전부·원래 이름 — 영어 별칭·요청 문맥(bid_type)은 없다."""
         item = self._make_item()
         notice = _item_to_notice(item, "용역")
-        assert notice.extra["bid_type"] == "용역"
-        assert notice.extra["bid_method"] == "제한경쟁"
-        assert notice.extra["contract_method"] == "총액계약"
-        assert "홍길동" in notice.extra["contact"]
-        assert "02-1234-5678" in notice.extra["contact"]
-        assert notice.extra["open_date"] == "202604200900"
+        assert notice.extra["bidMethdNm"] == "제한경쟁"
+        assert notice.extra["cntrctMthdNm"] == "총액계약"
+        assert notice.extra["ntceInsttOfclNm"] == "홍길동"
+        assert notice.extra["ntceInsttOfclTelNo"] == "02-1234-5678"
+        assert notice.extra["opengDt"] == "202604200900"
+        assert notice.extra["bidNtceNo"] == "20260405001"  # 표준 필드로 옮긴 값도 원문 그대로
+        assert "bid_type" not in notice.extra and "contact" not in notice.extra
+        assert len(notice.extra) == len([el for el in item if el.text and el.text.strip()])
 
     def test_empty_fields_handled_gracefully(self):
         """최소한의 필드만 있는 item도 에러 없이 변환."""
@@ -489,9 +494,10 @@ class TestNaraExtended:
         n = notices[0]
         assert n.bid_no == "낙찰-물품-R26BK0001-000"
         assert n.status == "closed"
-        assert n.extra["winner_name"] == "낙찰업체"
-        assert n.extra["sucsf_rate"] == "87.5"
-        assert n.extra["participant_count"] == "7"
+        assert n.extra["bidwinnrNm"] == "낙찰업체"  # v1.2.5 원문 extra — 태그 이름 그대로
+        assert n.extra["sucsfbidRate"] == "87.5"
+        assert n.extra["prtcptCnum"] == "7"
+        assert "data_type" not in n.extra and "bid_type" not in n.extra
 
     @pytest.mark.asyncio
     @respx.mock
@@ -531,6 +537,49 @@ class TestNaraExtended:
         assert "SECRET" not in str(exc.value)
         assert "ServiceKey=***" in str(exc.value)
         assert exc.value.__suppress_context__ is True
+
+    # v1.2.5 A — ID 없는 항목이 `낙찰-용역-`로 합쳐져 서로 다른 공고가 1건이 되던 결함. 반환형이 list라 보고는 경고 로그뿐(CONTRACT.md)
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_awards_without_id_are_skipped_not_merged(self, caplog):
+        from bid_collectors.nara import AWARD_BASE_URL, AWARD_SERVICES
+
+        three = "<item><bidNtceNm>낙찰</bidNtceNm><dminsttNm>기관</dminsttNm></item>" * 3
+        respx.get(f"{AWARD_BASE_URL}/{AWARD_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(three, total_count=3))
+        )
+        with caplog.at_level(logging.WARNING, logger="bid_collectors"):
+            notices = await NaraCollector(api_key="test-key").collect_awards(days=1, bid_types=["용역"])
+        assert notices == []
+        assert "3건 건너뜀" in caplog.text and "bidNtceNo" in caplog.text
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_contracts_without_id_are_skipped_not_merged(self, caplog):
+        from bid_collectors.nara import CONTRACT_BASE_URL, CONTRACT_SERVICES
+
+        three = "<item><cntrctNm>계약</cntrctNm><thtmCntrctAmt>1</thtmCntrctAmt></item>" * 3
+        respx.get(f"{CONTRACT_BASE_URL}/{CONTRACT_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(three, total_count=3))
+        )
+        with caplog.at_level(logging.WARNING, logger="bid_collectors"):
+            notices = await NaraCollector(api_key="test-key").collect_contracts(days=1, bid_types=["용역"])
+        assert notices == []
+        assert "3건 건너뜀" in caplog.text and "cntrctNo" in caplog.text
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_pre_specs_without_id_are_skipped_not_merged(self, caplog):
+        from bid_collectors.nara import PRE_SPEC_BASE_URL, PRE_SPEC_SERVICES
+
+        three = "<item><prdctClsfcNoNm>품명</prdctClsfcNoNm><orderInsttNm>기관</orderInsttNm></item>" * 3
+        respx.get(f"{PRE_SPEC_BASE_URL}/{PRE_SPEC_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(three, total_count=3))
+        )
+        with caplog.at_level(logging.WARNING, logger="bid_collectors"):
+            notices = await NaraCollector(api_key="test-key").collect_pre_specs(days=1, bid_types=["용역"])
+        assert notices == []
+        assert "3건 건너뜀" in caplog.text and "bfSpecRgstNo" in caplog.text
 
 
 # ---------------------------------------------------------------------------

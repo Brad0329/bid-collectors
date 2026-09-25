@@ -1,8 +1,10 @@
-"""항목 수준 공통 계약 — 모든 API 수집기에 같은 시나리오를 돌린다 (v1.2.4, Phase 005 R1·R2).
+"""항목 수준 공통 계약 — 모든 API 수집기에 같은 시나리오를 돌린다 (v1.2.4 Phase 005 R1·R2, v1.2.5 Phase 006 B·원칙 ①).
 
 - 2건 중 1건의 필드가 null·형식 이상이면 나머지 1건은 반환되고, 건너뛴 건수와 사유가 errors 한 줄에 담긴다
 - ID가 없는 항목은 `{접두사}-`로 합쳐지지 않고 건너뛰어 사유별 한 줄 + 건수로 보고된다
 - 숫자 ID 0은 유효하다
+- (v1.2.5 B) 선택 필드가 null인 항목은 건너뛰지 않고 그 필드만 비운 채 돌아온다
+- (v1.2.5 원칙 ①) extra에는 응답 항목의 비어 있지 않은 필드 전부가 원래 이름 그대로 담긴다 — 모르는 필드까지, 별칭 없이
 
 수집기별 복사 대신 한 곳에 둔 이유: 같은 결함을 한 수집기만 고치는 일이 3회 이상 반복됐다(debt-audit 2026-09-24).
 `test_every_collector_has_a_case`가 새 수집기를 이 목록에 강제로 편입시킨다.
@@ -76,6 +78,7 @@ class Case:
     id_field: str
     title_field: str
     zero_id: object                     # 숫자 0 ID (JSON은 int, XML은 "0")
+    optional_field: str                 # 선택 필드 — null이어도 항목은 살아야 한다(v1.2.5 B)
     collect_kwargs: dict = field(default_factory=dict)
     bad_format: dict | None = None      # 필수 필드가 아닌데 변환을 깨뜨리는 값(없으면 None)
 
@@ -86,42 +89,46 @@ CASES = {
         lambda i: {"pblancId": i, "pblancNm": f"공고{i}", "creatPnttm": TODAY.strftime("%Y-%m-%d"),
                    "excInsttNm": "기관"},
         "pblancId", "pblancNm", 0,
-        bad_format={"excInsttNm": None},  # 종전엔 pydantic 예외가 _fetch 밖으로 나가 앞 결과까지 0건
+        "reqstBeginEndDe",  # v1.2.4까지 null이면 `"~" in None` TypeError로 유효 공고가 "TypeError 1건"으로 버려졌다
+        bad_format={"pblancNm": ["제목이 list"]},  # 종전(v1.2.3)엔 pydantic 예외가 _fetch 밖으로 나가 앞 결과까지 0건
     ),
     KstartupCollector: Case(
         lambda: KstartupCollector(api_key="k"), _mock_kstartup,
         lambda i: {"pbanc_sn": i, "biz_pbanc_nm": f"공고{i}", "pbanc_rcpt_bgng_dt": TODAY.strftime("%Y%m%d"),
                    "rcrt_prgs_yn": "Y"},
-        "pbanc_sn", "biz_pbanc_nm", 0,
+        "pbanc_sn", "biz_pbanc_nm", 0, "pbanc_rcpt_end_dt",
+        bad_format={"biz_pbanc_nm": ["제목이 list"]},
     ),
     Subsidy24Collector: Case(
         lambda: Subsidy24Collector(api_key="k"), _mock_subsidy24,
         lambda i: {"서비스ID": i, "서비스명": f"서비스{i}", "소관기관명": "기관"},
         "서비스ID", "서비스명", 0,
-        bad_format={"소관기관명": None},
+        "소관기관명",  # v1.2.4까지 null이면 ValidationError로 건너뛰었다 — 선택 필드다
+        bad_format={"서비스명": ["제목이 list"]},
     ),
     SmesCollector: Case(
         lambda: SmesCollector(api_key="k"), _mock_smes,
         lambda i: {"itemId": i, "title": f"공고{i}", "viewUrl": "https://example.com"},
-        "itemId", "title", "0",
+        "itemId", "title", "0", "viewUrl",
+        # XML은 값이 전부 문자열이라 "형식 이상"을 만들 수 없다(태그 누락은 위 필수 필드 케이스가 본다) → bad_format 없음
     ),
     NaraCollector: Case(
         lambda: NaraCollector(api_key="k"), _mock_nara,
         lambda i: {"bidNtceNo": f"R{i}" if i != "0" else "0", "bidNtceOrd": "000", "bidNtceNm": f"공고{i}",
                    "ntceInsttNm": "기관"},
-        "bidNtceNo", "bidNtceNm", "0",
+        "bidNtceNo", "bidNtceNm", "0", "bidClseDt",
         collect_kwargs={"bid_types": ["용역"]},
         bad_format={"asignBdgtAmt": "미정"},  # 종전엔 로그만 남기고 조용히 버렸다
     ),
     AlioCollector: Case(
         AlioCollector, _mock_alio,
         lambda i: {"seq": i, "rtitle": f"공고{i}", "pname": "기관", "bdate": TODAY.strftime("%Y.%m.%d")},
-        "seq", "rtitle", 0,
+        "seq", "rtitle", 0, "bidInfoEndDt",
         bad_format={"bdate": "날짜아님"},
     ),
 }
 
-# HTML 행 단위라 "항목 필드"가 없다 — 행 예외·셀렉터 불일치는 test_generic_scraper가 따로 본다
+# HTML 행 단위라 "항목 필드"가 없다 — 행 예외·셀렉터 불일치는 test_generic_scraper가 따로 본다. 원문 전부(원칙 ①)도 별도 설계(plan.md 보류)
 EXEMPT = {"GenericScraper"}
 
 PARAMS = [pytest.param(c, id=c.__name__) for c in CASES]
@@ -165,6 +172,7 @@ async def test_bad_format_skips_only_that_item(cls):
     result = await _collect(case, [case.item(1), bad])
 
     assert len(result.notices) == 1
+    assert result.is_partial is True
     assert len(result.errors) == 1
     assert "1건 건너뜀" in result.errors[0]
 
@@ -194,3 +202,51 @@ async def test_zero_id_is_valid(cls):
     assert result.errors == []
     assert len(result.notices) == 1
     assert "0" in result.notices[0].bid_no.split("-")
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_null_optional_field_keeps_item(cls):
+    """(v1.2.5 B) 선택 필드가 null인 항목은 건너뛰지 않고 그 필드만 비운 채 돌아온다 — 2건 중 1건 null → 2건, errors 없음."""
+    case = CASES[cls]
+    second = case.item(2)
+    second[case.optional_field] = None
+    result = await _collect(case, [case.item(1), second])
+
+    assert result.errors == []
+    assert len(result.notices) == 2
+
+
+# 응답에 있을 리 없는 이름 — "모르는 필드도 전부"를 잰다. 빈 값 3종은 빠져야 하고 0은 값이다
+EXTRA_PROBE = {"zz_unknown": "값", "zz_zero": 0, "zz_empty": "", "zz_blank": "  ", "zz_none": None}
+
+
+def _nonempty_keys(item: dict) -> set[str]:
+    """테스트 쪽의 독립 구현 — 헬퍼(raw_fields)를 쓰지 않고 같은 규칙으로 다시 센다(XML은 값이 전부 문자열이 된다)."""
+    return {k for k, v in item.items() if v is not None and str(v).strip() != ""}
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_extra_has_every_nonempty_field(cls):
+    """(v1.2.5 원칙 ①) 모르는 필드까지 전부, 빈 값만 빼고 원래 이름으로 extra에 담긴다."""
+    case = CASES[cls]
+    item = {**case.item(1), **EXTRA_PROBE}
+    result = await _collect(case, [item])
+
+    assert len(result.notices) == 1
+    extra = result.notices[0].extra
+    assert set(extra) == _nonempty_keys(item)
+    assert extra["zz_unknown"] == "값"
+    assert extra["zz_zero"] in (0, "0")  # XML은 텍스트 "0"
+    assert not {"zz_empty", "zz_blank", "zz_none"} & set(extra)
+
+
+@pytest.mark.parametrize("cls", PARAMS)
+async def test_extra_keys_are_original_names(cls):
+    """(v1.2.5 원칙 ①) 이름을 바꾼 키(영어 별칭·요청 문맥)가 없다 — extra의 키는 전부 응답 항목의 키다."""
+    case = CASES[cls]
+    item = case.item(1)
+    result = await _collect(case, [item])
+
+    extra = result.notices[0].extra
+    assert set(extra) <= set(item)
+    assert not {"bid_type", "data_type", "contact", "est_price"} & set(extra)

@@ -203,15 +203,17 @@ class TestItemToNotice:
         assert len(notice.attachments) == 2
 
     def test_extra_fields(self):
-        """extra 딕셔너리에 추가 필드 포함."""
+        """v1.2.5 원칙 ①: extra는 응답 키 전부·원래 이름(영어 별칭 없음), 값 타입 그대로."""
         notice = _item_to_notice(SAMPLE_ITEM, self._cutoff())
         assert notice.extra is not None
-        assert notice.extra["sub_category"] == "수출정보제공"
-        assert notice.extra["target"] == "중소기업"
+        assert notice.extra["pldirSportRealmMlsfcCodeNm"] == "수출정보제공"
+        assert notice.extra["trgetNm"] == "중소기업"
         assert notice.extra["hashtags"] == "수출,경영"
-        assert notice.extra["reference"] == "담당자 070-1234-5678"
-        assert notice.extra["req_method"] == "이메일 접수"
-        assert notice.extra["view_count"] == 100
+        assert notice.extra["refrncNm"] == "담당자 070-1234-5678"
+        assert notice.extra["reqstMthPapersCn"] == "이메일 접수"
+        assert notice.extra["inqireCo"] == 100
+        assert set(notice.extra) == set(SAMPLE_ITEM)  # 빈 값이 없는 표본이라 키 집합이 같다
+        assert "sub_category" not in notice.extra
 
     def test_old_item_returns_none(self):
         """cutoff 이전 항목 → None."""
@@ -240,7 +242,19 @@ class TestItemToNotice:
         assert notice is not None
         assert notice.bid_no == "BIZINFO-PBLN_TEST"
         assert notice.attachments is None
-        assert notice.extra is None
+        assert set(notice.extra) == set(item)  # v1.2.5: 표준 필드로 옮긴 값도 원문 그대로 extra에(종전엔 None)
+
+    # v1.2.5 B — 선택 필드 하나의 이상이 항목(또는 결과 전체)을 잃게 하지 않는다
+    def test_null_reqst_period_keeps_item(self):
+        """reqstBeginEndDe가 null이어도 항목은 돌아온다 — 종전엔 `"~" in None` TypeError로 버려졌다."""
+        notice = _item_to_notice({**SAMPLE_ITEM, "reqstBeginEndDe": None}, self._cutoff())
+        assert notice is not None
+        assert notice.start_date is None and notice.end_date is None
+
+    @pytest.mark.parametrize("value", [None, 123, ["x"], {"a": 1}, "", "날짜아님"])
+    def test_is_within_cutoff_never_raises(self, value):
+        """항목 try 밖(`items[-3:]` 조기 종료 판정)에서 불리므로 어떤 값에도 예외를 던지지 않는다 — 판정 불가는 True(멈추지 않음)."""
+        assert _is_within_cutoff({"creatPnttm": value}, self._cutoff()) is True
 
 
 # ---------------------------------------------------------------------------

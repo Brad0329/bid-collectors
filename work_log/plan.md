@@ -10,7 +10,7 @@
 
 ## 시스템 개요
 - 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부)와 임의 HTML
-  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.1.0).
+  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.2.5).
   소비자는 BidWatch(`C:\Users\user\Documents\bidwatch`, editable 설치). 역할 경계: 외부 사이트에서 공고를 가져오는 것은
   전부 이 패키지 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은 BidWatch. 요구사항 상세는 `docs/REQUIREMENTS.md`.
 
@@ -81,10 +81,14 @@
   - 완료 조건: REQUIREMENTS '공통 계약'의 (v1.2.4) 기준 3개 충족 + 수집기별 "null 필드 1건·빈 ID"에서 **건수를 재는** 테스트(변이 확인) ·
     전체 테스트 0 failed · 버전 1.2.3 → 1.2.4(`pyproject.toml`·`__init__.py` — 1.2.3은 알리오 누락 수정 5afbc99가 썼다)
 - [ ] Phase 006: v1.2.5 — 항목 잔여 결함 A·B + 원칙 ① `extra` 원문 전부 전달 (F-001~F-006·F-010, F-002 확장 3메서드) — **계약 불변(`extra`는 계약 밖, 시그니처·bid_no 불변) → patch 1.2.4 → 1.2.5**
+  (**구현 완료 2026-09-25, handover 문서 작성 대기(사용자 지시)** — 단위 421 passed·ruff 통과 / 실호출 extra 실측: 나라장터 3서비스 1페이지 300건·알리오 10건 전부
+  `extra == 비어 있지 않은 필드` / 변이 14건 전부 잡힘(`scripts/_tmp/mutate_phase006.py`) / BidWatch `backend/tests` 118 passed(읽기·실행만) /
+  qa-tester 합격: 441 passed/0 failed(실호출 20건 포함, 통합 errors는 절단 보고뿐·항목 건너뜀 0건) + 추가 실측 낙찰 용역 7일 155건·사전규격 1일 2건 —
+  bid_no 전부 고유, `-`로 끝나는 ID 0, extra 전부 원문 태그. 완료 조건 중 handover 문서만 남음)
   - 출처: 2026-09-25 세션 평가(Phase 005 잔여 A·B) + 같은 날 사용자 확정 최상위 원칙(`docs/CONTRACT.md` 설계 원칙 첫 항목, 발급 2026-09-25).
     원칙 ②(표준 필드 파생 제거)는 이 Phase 범위 밖 — 소비자 값이 바뀌어 일반 트랙으로 따로 발급.
   - 트랙: 저위험. 단 BidWatch 화면이 `extra`의 영어 키를 읽고 있어(아래 4) 그쪽 후속이 같은 시기에 필요 → 완료 시 bidwatch `backend/tests` 통과(읽기·실행만) + handover 문서 `docs/handover/v1.2.5.md`(대응표 포함).
-  - **착수 전 확인 6건 (기본안 — 확인되면 "확정"으로 고친다)**:
+  - **착수 전 확인 6건 — 확정(기본안 그대로, 2026-09-25 "handover 작성 직전까지 완료하고 대기" 지시)**:
     ① BidWatch가 읽는 영어 키 26개(4 참조) → **기본안: 원문 이름만 넘긴다(두 이름 병기는 원칙 위반). BidWatch `NoticeModal.tsx`가 원문 이름을 읽도록 고치고, 기존 DB 행은 오픈 전 1개월 재수집(upsert)으로 교체.**
     ② 요청 문맥 `bid_type`·`data_type`(응답에 없는 값) → **기본안: `extra`에서 뺀다 — `bid_no` 접두사(`용역-`·`낙찰-용역-`)에 이미 있다.** BidWatch의 "입찰 구분" 표시는 bid_no에서 자른다.
     ③ "비어 있지 않은"의 정의 → **기본안: None·빈 문자열·공백만 제외, 0·False·"0"은 포함.**
@@ -173,7 +177,9 @@
     K-Startup `fetch_detail`의 `cond[pbanc_sn::EQ]`가 실제로 먹는지(응답 ID ≠ 요청 ID 검사 없음 — 무시되면 다른 공고 본문을 조용히 반환)
   - 저위험 결함: K-Startup odcloud `code<0` 미검사·`totalCount` 사용(보조금24는 `matchCount`) / 보조금24 `신청기한` 기간 형식이면 시작일이 end_date로 /
     기업마당 날짜 형식 변경 시 cutoff 필터가 조용히 꺼짐 / 기업마당·K-Startup·보조금24 total이 문자열·null이면 TypeError로 전체 손실 /
-    GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다")
+    GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다") /
+    (qa-tester 2026-09-25) httpx `_client` INFO 로그가 요청 URL의 `serviceKey`·`crtfcKey`를 평문으로 싣는다 — 이 패키지 로거가 아니라 소비자가
+    루트 로거를 INFO로 열 때 노출. `create_client`에 마스킹 필터를 붙일지 결정 대기(`scripts/_tmp/qa_phase006_integration.log`에 실제로 평문 키가 남았다 — gitignore 영역)
   - **안 함(2026-09-25 사용자)**: GenericScraper status를 게시일로 판정(어제 공고가 closed) — 바꾸면 소비자 값이 바뀌는 일반 트랙인데,
     BidWatch가 GenericScraper 공고의 상태 배지를 숨겨 쓰지 않는다. BidWatch가 이 status를 쓰기 시작하면 다시 연다.
   - 일반 트랙: interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·

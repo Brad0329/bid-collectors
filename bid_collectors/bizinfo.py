@@ -10,12 +10,12 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
 from .utils.status import determine_status
-from .utils.text import clean_html_to_text
+from .utils.text import as_text, clean_html_to_text
 
 logger = logging.getLogger("bid_collectors")
 
@@ -124,35 +124,38 @@ class BizinfoCollector(BaseCollector):
 
 
 def _is_within_cutoff(item: dict, cutoff: datetime) -> bool:
-    """항목의 생성일이 cutoff 이내인지 확인."""
-    creat = item.get("creatPnttm", "")
+    """항목의 생성일이 cutoff 이내인지. 값이 없거나 읽을 수 없으면 True(멈추지 않는다).
+
+    어떤 값(null·숫자·list)에도 예외를 던지지 않는다 — 항목 변환 try 밖(`items[-3:]` 조기 종료 판정)에서 불려,
+    여기서 예외가 나면 앞 페이지까지 결과 전체를 잃는다(v1.2.5 B).
+    """
+    creat = as_text(item.get("creatPnttm")).strip()
     if not creat:
         return True
     try:
-        dt = datetime.strptime(creat[:10], "%Y-%m-%d")
-        return dt >= cutoff
-    except (ValueError, IndexError):
+        return datetime.strptime(creat[:10], "%Y-%m-%d") >= cutoff
+    except ValueError:
         return True
 
 
 def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
     """API 응답 항목을 Notice 모델로 변환. cutoff 이전이면 None."""
-    creat_str = item.get("creatPnttm", "")
+    creat_str = as_text(item.get("creatPnttm"))
     if creat_str:
         try:
             creat_dt = datetime.strptime(creat_str[:10], "%Y-%m-%d")
             if creat_dt < cutoff:
                 return None
-        except (ValueError, IndexError):
-            pass
+        except ValueError:
+            pass  # 형식이 다르면 기준일 판정을 못 한다 — 버리지 않고 통과시킨다(_is_within_cutoff와 같은 규칙)
 
     pblanc_id = item.get("pblancId")
     title = item.get("pblancNm")
     require_fields(pblancId=pblanc_id, pblancNm=title)
-    url = item.get("pblancUrl", "")
+    url = as_text(item.get("pblancUrl"))
 
-    # 신청기간 파싱
-    req_period = item.get("reqstBeginEndDe", "")
+    # 신청기간 파싱 — 선택 필드가 null이어도 항목을 버리지 않는다(v1.2.5 B: 종전엔 `"~" in None`으로 TypeError)
+    req_period = as_text(item.get("reqstBeginEndDe"))
     start_str = parse_date(req_period)
     # reqstBeginEndDe에서 종료일 추출 시도 (기간 형식: "2024-03-01 ~ 2024-04-05")
     end_str = None
@@ -163,45 +166,36 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
 
     status = determine_status(end_str) if end_str else "ongoing"
 
-    content = clean_html_to_text(item.get("bsnsSumryCn", ""))
+    content = clean_html_to_text(as_text(item.get("bsnsSumryCn")))
 
     return Notice(
         source="기업마당",
         bid_no=f"BIZINFO-{pblanc_id}",
         title=title,
-        organization=item.get("excInsttNm", ""),
+        organization=as_text(item.get("excInsttNm")),
         start_date=start_str or None,
         end_date=end_str or None,
         status=status,
         url=url,
         detail_url=url,
         content=content,
-        region=item.get("jrsdInsttNm", ""),
-        category=item.get("pldirSportRealmLclasCodeNm", ""),
+        region=as_text(item.get("jrsdInsttNm")),
+        category=as_text(item.get("pldirSportRealmLclasCodeNm")),
         attachments=_parse_attachments(item),
-        extra={
-            k: v for k, v in {
-                "sub_category": item.get("pldirSportRealmMlsfcCodeNm", ""),
-                "target": item.get("trgetNm", ""),
-                "hashtags": item.get("hashtags", ""),
-                "reference": item.get("refrncNm", ""),
-                "req_method": item.get("reqstMthPapersCn", ""),
-                "view_count": item.get("inqireCo"),
-            }.items() if v is not None and v != ""
-        } or None,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 해시태그·대상·담당자 등은 응답 키 그대로
     )
 
 
 def _parse_attachments(item: dict) -> list[dict] | None:
     """첨부파일 정보 추출."""
     attachments = []
-    file_name = item.get("printFileNm", "")
-    file_url = item.get("printFlpthNm", "")
+    file_name = as_text(item.get("printFileNm"))
+    file_url = as_text(item.get("printFlpthNm"))
     if file_name and file_url:
         attachments.append({"name": file_name, "url": file_url})
 
-    file_name2 = item.get("fileNm", "")
-    file_url2 = item.get("flpthNm", "")
+    file_name2 = as_text(item.get("fileNm"))
+    file_url2 = as_text(item.get("flpthNm"))
     if file_name2 and file_url2:
         attachments.append({"name": file_name2, "url": file_url2})
 

@@ -1,7 +1,7 @@
 # bid-collectors ↔ BidWatch 인터페이스 정의
 
 > **이 문서는 양쪽 프로젝트에 동일하게 존재합니다.**
-> 변경 시 양쪽 모두 업데이트할 것.
+> 변경은 bid-collectors 쪽에서 하고 `docs/handover/v<버전>.md`로 넘긴다 — bidwatch 쪽 파일은 bidwatch 세션이 반영한다(2026-09-25).
 >
 > - `bid-collectors/docs/interface.md`
 > - `bidwatch/docs/interface.md`
@@ -43,11 +43,14 @@ class Notice(BaseModel):
     attachments: list[dict] | None = None
     # 형식: [{"name": "파일명.pdf", "url": "https://..."}, ...]
 
-    # === 수집기별 추가 데이터 ===
+    # === 출처 원문 전부 (v1.2.5) ===
     extra: dict | None = None
-    # 표준 필드에 안 맞는 수집기별 데이터를 여기에 넣음
-    # 예: {"est_price": 50000000, "bid_method": "제한경쟁", "contact": "홍길동 02-1234-5678"}
-    # BidWatch는 이 필드를 JSONB로 저장
+    # 응답 항목의 비어 있지 않은 필드 전부를 원래 이름 그대로 (CONTRACT.md 설계 원칙 '숨기지도 더하지도 않는다').
+    # 표준 필드로 옮긴 값도 원문 그대로 다시 들어 있다. JSON은 값 타입·중첩 그대로, XML은 태그 → 텍스트
+    # (같은 태그가 2개 이상이면 list, 자식이 있는 태그는 dict). 0·False는 값이고 None·빈 문자열은 뺀다.
+    # 요청 문맥(용역/물품/공사, 낙찰/계약/사전규격)은 응답에 없으므로 extra가 아니라 bid_no 접두사에 있다.
+    # 예(나라장터 용역): {"bidNtceNo": "R26BK01736671", "presmptPrce": "456714000", "bidMethdNm": "직찰", ...}
+    # BidWatch는 이 필드를 JSONB로 저장. 키 이름은 출처 API 명세 그대로 — v1.2.4까지의 영어 별칭(est_price·contact 등)은 없다.
 ```
 
 ### 필드 규칙
@@ -60,7 +63,7 @@ class Notice(BaseModel):
 | `budget` | 원 단위 정수. 미공개/미확인이면 `None` |
 | `content` | HTML 태그 제거된 순수 텍스트. 공백/줄바꿈 정리 완료 상태 |
 | `attachments` | `None`이면 첨부 없음. 빈 리스트 `[]`도 첨부 없음 |
-| `extra` | 수집기가 자유롭게 사용. BidWatch는 JSONB로 통째 저장 |
+| `extra` | 응답 항목 원문 전부, 원래 이름(v1.2.5). BidWatch는 JSONB로 통째 저장하고 화면에 보일 키는 BidWatch가 고른다 |
 
 ---
 
@@ -290,7 +293,7 @@ result = await scraper.collect(days=30)
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.2.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.2.5` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

@@ -158,23 +158,25 @@ class TestItemToNotice:
         assert notice.start_date is None
 
     def test_extra_fields(self):
-        """extra 딕셔너리에 추가 필드 포함."""
+        """v1.2.5 원칙 ①: extra는 응답 키 전부·원래 이름(한국어 그대로, 영어 별칭 없음), 값 타입 그대로."""
         notice = _item_to_notice(SAMPLE_ITEM)
         assert notice.extra is not None
-        assert notice.extra["support_type"] == "현금(감면)"
-        assert notice.extra["target"] == "중소기업, 소상공인"
-        assert notice.extra["selection_criteria"] == "매출액 기준"
-        assert notice.extra["apply_method"] == "온라인 신청"
-        assert notice.extra["deadline_raw"] == DEADLINE
-        assert notice.extra["department"] == "수출지원과"
-        assert notice.extra["agency_type"] == "중앙행정기관"
-        assert notice.extra["user_type"] == "기업"
-        assert notice.extra["reception_agency"] == "중소벤처기업부"
-        assert notice.extra["phone"] == "1357"
-        assert notice.extra["view_count"] == 500
+        assert notice.extra["지원유형"] == "현금(감면)"
+        assert notice.extra["지원대상"] == "중소기업, 소상공인"
+        assert notice.extra["선정기준"] == "매출액 기준"
+        assert notice.extra["신청방법"] == "온라인 신청"
+        assert notice.extra["신청기한"] == DEADLINE
+        assert notice.extra["부서명"] == "수출지원과"
+        assert notice.extra["소관기관유형"] == "중앙행정기관"
+        assert notice.extra["사용자구분"] == "기업"
+        assert notice.extra["접수기관"] == "중소벤처기업부"
+        assert notice.extra["전화문의"] == "1357"
+        assert notice.extra["조회수"] == 500
+        assert set(notice.extra) == set(SAMPLE_ITEM)
+        assert "support_type" not in notice.extra
 
-    def test_extra_none_when_all_empty(self):
-        """extra 필드가 모두 비어있으면 None."""
+    def test_minimal_item_extra_is_raw_fields(self):
+        """v1.2.5: 추가 필드가 없어도 표준 필드로 옮긴 값이 원문 그대로 extra에 있다(종전엔 None)."""
         item = {
             "서비스ID": "SVC999",
             "서비스명": "테스트",
@@ -182,7 +184,7 @@ class TestItemToNotice:
         }
         notice = _item_to_notice(item)
         assert notice is not None
-        assert notice.extra is None
+        assert notice.extra == item
 
     # v1.2.4: 종전엔 None을 돌려 조용히 버렸다 — 이제 예외로 올려 _fetch가 건너뛴 건수·사유를 errors에 싣는다
     def test_missing_service_id_raises(self):
@@ -199,6 +201,21 @@ class TestItemToNotice:
         item = {"지원내용": "test"}
         with pytest.raises(MissingFieldError, match="서비스ID,서비스명"):
             _item_to_notice(item)
+
+    # v1.2.5 B — 선택 필드 하나의 이상이 항목(또는 결과 전체)을 잃게 하지 않는다
+    def test_null_organization_keeps_item(self):
+        """소관기관명이 null이면 종전엔 ValidationError로 건너뛰었다 — 선택 필드라 비운 채 돌아온다."""
+        notice = _item_to_notice({**SAMPLE_ITEM, "소관기관명": None})
+        assert notice.organization == ""
+
+    @pytest.mark.parametrize("item, expected", [
+        ({"서비스명": None, "지원대상": 123, "사용자구분": ["소상공인"], "서비스분야": {"a": 1}}, True),
+        ({"서비스명": None, "지원대상": None}, False),
+        ({}, False),
+    ])
+    def test_is_business_target_never_raises(self, item, expected):
+        """항목 변환 try 밖에서 불리므로 어떤 값(null·숫자·list·dict)에도 예외를 던지지 않는다."""
+        assert _is_business_target(item) is expected
 
 
 # ---------------------------------------------------------------------------

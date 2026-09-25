@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 from lxml import etree
 
-from .base import BaseCollector, require_fields
+from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
@@ -144,11 +144,6 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     fallback_url = f"https://www.g2b.go.kr:8081/ep/invitation/publish/bidInfoDtl.do?bidno={bid_no_raw}&bidseq={bid_no_ver}"
     url = t("bidNtceDtlUrl") or fallback_url
 
-    # 담당자
-    contact_name = t("ntceInsttOfclNm")
-    contact_phone = t("ntceInsttOfclTelNo")
-    contact_email = t("ntceInsttOfclEmailAdrs") or t("dminsttOfclEmailAdrs")
-
     return Notice(
         source="나라장터",
         bid_no=f"{bid_type}-{full_bid_no}",
@@ -164,22 +159,9 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         region=t("dminsttNm"),
         category=category,
         attachments=attachments or None,
-        extra={
-            k: v for k, v in {
-                "bid_type": bid_type,
-                "est_price": est_price,
-                "budget": budget,
-                "bid_method": t("bidMethdNm"),
-                "contract_method": t("cntrctMthdNm"),
-                "award_method": t("sucsfbidMthdNm"),
-                "contact": f"{contact_name} {contact_phone}".strip(),
-                "contact_email": contact_email,
-                "tech_eval_ratio": t("techAbltEvlRt"),
-                "price_eval_ratio": t("bidPrceEvlRt"),
-                "bid_qual": t("bidQlftcRgstDt"),
-                "open_date": t("opengDt"),
-            }.items() if v is not None and v != ""
-        } or None,
+        # 원문 전부(v1.2.5, 원칙 ①) — 입찰방식·낙찰방법·담당자·평가비율 등은 응답 태그 이름 그대로 extra에 있다.
+        # 종전 손 매핑은 실제 응답 태그의 1/3만 읽었고 오타(bidQlftcRgstDt)·없는 태그(cntrctMthdNm)로 항상 빈 키가 있었다.
+        extra=raw_fields(item),
     )
 
 
@@ -191,6 +173,7 @@ def _award_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     bid_no_raw = t("bidNtceNo")
+    require_fields(bidNtceNo=bid_no_raw, bidNtceNm=t("bidNtceNm"))  # 빈 ID는 `낙찰-용역-`로 합쳐진다(v1.2.5 A)
     bid_no_ver = t("bidNtceOrd")
     full_bid_no = f"{bid_no_raw}-{bid_no_ver}" if bid_no_ver else bid_no_raw
 
@@ -211,21 +194,7 @@ def _award_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         url=url,
         detail_url=url,
         budget=budget,
-        extra={
-            k: v for k, v in {
-                "bid_type": bid_type,
-                "data_type": "낙찰",
-                "winner_name": t("bidwinnrNm"),
-                "winner_bizno": t("bidwinnrBizno"),
-                "winner_ceo": t("bidwinnrCeoNm"),
-                "winner_addr": t("bidwinnrAdrs"),
-                "winner_tel": t("bidwinnrTelNo"),
-                "sucsf_amt": budget,
-                "sucsf_rate": t("sucsfbidRate"),
-                "open_date": t("rlOpengDt"),
-                "participant_count": t("prtcptCnum"),
-            }.items() if v is not None and v != ""
-        } or None,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5) — 낙찰자·낙찰률·참가자 수는 응답 태그 이름 그대로
     )
 
 
@@ -237,6 +206,7 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     cntrct_no = t("dcsnCntrctNo") or t("untyCntrctNo")
+    require_fields(cntrctNo=cntrct_no, cntrctNm=t("cntrctNm"))  # 빈 ID는 `계약-용역-`로 합쳐진다(v1.2.5 A)
     cntrct_date = parse_date(t("cntrctCnclsDate")) or ""
     cntrct_end = parse_date(t("cntrctPrd")) or ""
 
@@ -257,18 +227,7 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         detail_url=detail_url,
         budget=budget,
         region=t("cntrctInsttJrsdctnDivNm"),
-        extra={
-            k: v for k, v in {
-                "bid_type": bid_type,
-                "data_type": "계약",
-                "bid_no_ref": t("ntceNo"),
-                "bsns_div": t("bsnsDivNm"),
-                "contract_method": t("cntrctCnclsMthdNm"),
-                "contact": f"{t('cntrctInsttOfclNm')} {t('cntrctInsttOfclTelNo')}".strip(),
-                "guarantee_rate": t("grntymnyRate"),
-                "base_law": t("baseLawNm"),
-            }.items() if v is not None and v != ""
-        } or None,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5)
     )
 
 
@@ -280,6 +239,7 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     ref_no = t("bfSpecRgstNo") or t("refNo")
+    require_fields(bfSpecRgstNo=ref_no)  # 빈 ID는 `사전규격-용역-`로 합쳐진다(v1.2.5 A). 제목은 품명 폴백이 있어 검사하지 않는다
     rcpt_date = parse_date(t("rcptDt")) or ""
     opinion_close = parse_date(t("opninRgstClseDt")) or ""
 
@@ -306,18 +266,7 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         budget=budget,
         category=t("prdctClsfcNoNm"),
         attachments=attachments or None,
-        extra={
-            k: v for k, v in {
-                "bid_type": bid_type,
-                "data_type": "사전규격",
-                "rl_dminstt": t("rlDminsttNm"),
-                "contact": f"{t('ofclNm')} {t('ofclTelNo')}".strip(),
-                "sw_biz": t("swBizObjYn"),
-                "delivery_date": t("dlvrTmlmtDt"),
-                "delivery_days": t("dlvrDaynum"),
-                "bid_ntce_list": t("bidNtceNoList"),
-            }.items() if v is not None and v != ""
-        } or None,
+        extra=raw_fields(item),  # 원문 전부(v1.2.5)
     )
 
 
@@ -492,6 +441,7 @@ class NaraCollector(BaseCollector):
         bid_types = kwargs.get("bid_types", list(services.keys()))
         date_ranges = _split_date_range(days)
         notices: list[Notice] = []
+        skips: Counter[str] = Counter()
 
         logger.info(f"[나라장터-{label}] 수집 시작: days={days}")
 
@@ -522,13 +472,19 @@ class NaraCollector(BaseCollector):
                         for item in items:
                             try:
                                 notice = item_converter(item, bid_type)
-                                notices.append(notice)
                             except Exception as e:
-                                logger.warning(f"[나라장터-{label}] 항목 파싱 실패: {e}")
+                                # 그 항목만 건너뛴다 — ID 없는 항목을 통과시키면 아래 중복 제거가 서로 다른 공고를 1건으로 합친다(v1.2.5 A)
+                                self._record_skip(skips, e, item)
+                                continue
+                            notices.append(notice)
 
                         if page * ROWS_PER_PAGE >= total:
                             break
                         page += 1
+
+        if skip_msg := self._skip_message(skips):
+            # 반환형이 list[Notice]라 errors 채널이 없다(CONTRACT.md — 채널 추가는 선택 인자 = minor, plan.md 보류) — 경고 로그가 유일한 보고 자리
+            logger.warning(f"[나라장터-{label}] {skip_msg}")
 
         # 중복 제거
         seen = set()

@@ -54,10 +54,9 @@ SAMPLE_ITEM_XML = """\
   <dminsttNm>서울</dminsttNm>
   <ntceInsttOfclNm>홍길동</ntceInsttOfclNm>
   <ntceInsttOfclTelNo>02-1234-5678</ntceInsttOfclTelNo>
-  <bidNtceFlNm1>첨부파일1.pdf</bidNtceFlNm1>
-  <bidNtceFlUrl1>https://example.com/file1.pdf</bidNtceFlUrl1>
-  <bidNtceFlNm2>첨부파일2.hwp</bidNtceFlNm2>
-  <bidNtceFlUrl2>https://example.com/file2.hwp</bidNtceFlUrl2>
+  <ntceSpecDocUrl1>https://example.com/file1.pdf</ntceSpecDocUrl1>
+  <ntceSpecFileNm1>첨부파일1.pdf</ntceSpecFileNm1>
+  <ntceSpecDocUrl2>https://example.com/file2.hwp</ntceSpecDocUrl2>
   <opengDt>202604200900</opengDt>
 </item>"""
 
@@ -205,7 +204,7 @@ class TestItemToNotice:
         assert len(notice.attachments) == 2
         assert notice.attachments[0]["name"] == "첨부파일1.pdf"
         assert notice.attachments[0]["url"] == "https://example.com/file1.pdf"
-        assert notice.attachments[1]["name"] == "첨부파일2.hwp"
+        assert notice.attachments[1] == {"name": "규격서2", "url": "https://example.com/file2.hwp"}  # 파일명 없으면 규격서{i}
 
     def test_category_combined(self):
         """용역: 공공조달분류 대 > 중 (태그는 2026-09-24 실제 용역 목록 응답 기준)."""
@@ -448,9 +447,10 @@ AWARD_ITEM_XML = """\
   <bidwinnrNm>낙찰업체</bidwinnrNm><sucsfbidRate>87.5</sucsfbidRate><prtcptCnum>7</prtcptCnum>
 </item>"""
 
+# 공사 계약의 제목 태그는 cnstwkNm(cntrctNm 없음) — 2026-09-25 실측 61/61건. 종전 픽스처는 cntrctNm을 넣어 공사 전건 누락을 가렸다
 CONTRACT_ITEM_XML = """\
 <item>
-  <dcsnCntrctNo>C26000111</dcsnCntrctNo><cntrctNm>계약 테스트</cntrctNm>
+  <dcsnCntrctNo>C26000111</dcsnCntrctNo><cnstwkNm>계약 테스트</cnstwkNm>
   <cntrctInsttNm>계약기관</cntrctInsttNm><thtmCntrctAmt>5000000</thtmCntrctAmt>
 </item>"""
 
@@ -510,7 +510,25 @@ class TestNaraExtended:
         notices = await NaraCollector(api_key="test-key").collect_contracts(days=1, bid_types=["공사"])
         assert len(notices) == 1
         assert notices[0].bid_no == "계약-공사-C26000111"
+        assert notices[0].title == "계약 테스트"
         assert notices[0].budget == 5000000
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_contracts_construction_all_items_kept(self, caplog):
+        """v1.3.1 — 공사 N건(제목 cnstwkNm만) → N건 반환, 건너뜀 경고 없음. 용역·물품은 cntrctNm."""
+        from bid_collectors.nara import CONTRACT_BASE_URL, CONTRACT_SERVICES
+
+        cnstwk = "".join(f"<item><untyCntrctNo>R26TE{i}</untyCntrctNo><cnstwkNm>공사{i}</cnstwkNm></item>" for i in range(5))
+        servc = "<item><untyCntrctNo>R26TE9</untyCntrctNo><cntrctNm>용역 계약</cntrctNm></item>"
+        respx.get(f"{CONTRACT_BASE_URL}/{CONTRACT_SERVICES['공사']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(cnstwk, total_count=5)))
+        respx.get(f"{CONTRACT_BASE_URL}/{CONTRACT_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(servc, total_count=1)))
+        with caplog.at_level(logging.WARNING, logger="bid_collectors"):
+            notices = await NaraCollector(api_key="test-key").collect_contracts(days=1, bid_types=["공사", "용역"])
+        assert [n.title for n in notices] == [f"공사{i}" for i in range(5)] + ["용역 계약"]
+        assert "건너뜀" not in caplog.text
 
     @pytest.mark.asyncio
     @respx.mock

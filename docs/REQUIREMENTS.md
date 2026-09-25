@@ -55,8 +55,8 @@
     `test_extra_keys_are_original_names`(6종 parametrize) · `test_raw_fields.py` 6건 · 통합 `TestNaraIntegration::test_extra_matches_raw_response`(3서비스 1페이지
     300건, 2026-09-25)·`test_alio::test_real_api_extra_matches_raw_items`(10건). 해소된 종전 위반(2026-09-25 실측, `scripts/_tmp/nara_field_coverage.py`):
     나라장터 응답 태그 중 용역 113개의 41개·물품 101의 40·공사 143의 37만 읽음 / 영어로 이름을 바꾼 키 / 이름이 틀려 항상 빈값인 키 2개(`cntrctMthdNm`·`bidQlftcRgstDt`) /
-    공사 배정예산 `bdgtAmt` 미수신(extra에는 담긴다 — `budget` 표준 필드 반영은 원칙 ②). 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`) 루프는 유지
-    (300건 중 0건이지만 무해 — 나타나면 attachments로 담긴다)
+    공사 배정예산 `bdgtAmt` 미수신(extra에는 담긴다 — `budget` 표준 필드 반영은 원칙 ②). 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`) 루프는
+    명세에도 없는 태그라 v1.3.1(Phase 008)에서 삭제
   - [ ] (원칙 ②) 표준 필드는 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수·기본 필터가 없다 → 테스트 없음.
     현재 위반(2026-09-25): `status`를 마감일로 추정(전 수집기 — 나라장터 취소공고 `ntceKindNm`가 ongoing으로 나감) · `budget` 배정예산→추정가격 대체(F-001) ·
     `category` 대>중 합성(F-001) · `region`에 수요기관명 `dminsttNm`(F-001) · content 500자 절단(F-003·F-006) · organization 상수(F-006 "중소벤처기업부",
@@ -74,7 +74,8 @@
   - [x] `resultCode != 00` 응답은 `ValueError` → `test_error_response_raises_valueerror`
   - [x] bid_no = `{용역|물품|공사}-{bidNtceNo}-{bidNtceOrd}`(차수 없으면 생략) → `test_bid_no_format`·`test_bid_no_without_ord`
   - [x] budget = 배정예산, 없으면 추정가격(0원도 유효값) → `test_budget_and_est_price`
-  - [x] 공고첨부 1~10 + 규격서 1~10을 attachments로 병합 → `test_attachments_parsing`
+  - [x] 공고규격서 1~10(`ntceSpecDocUrl`·`ntceSpecFileNm`, 이름 없으면 `규격서{i}`)이 attachments → `test_attachments_parsing`
+    (v1.3.1: 종전 "공고첨부 1~10"의 `bidNtceFl*`는 명세·실측 3,360건에 없는 태그라 삭제 — 다른 첨부는 별도 오퍼레이션에만 있다)
   - [x] 여러 페이지를 totalCount까지 넘긴다 → `test_multi_page_pagination`
   - [x] 429를 받으면 재시도해 성공 응답을 쓴다 → `test_429_retry_logic` · 재시도 소진 시 0건 + errors → `test_429_exhausts_retries`
   - [x] 한 서비스의 `resultCode != 00`(쿼터 초과 포함)이 앞서 수집한 서비스 결과를 버리지 않는다 — errors에 기록하고
@@ -89,13 +90,16 @@
   - [x] 사전규격: bid_no = `사전규격-{type}-{bfSpecRgstNo}`, 의견마감일이 end_date, 규격서 1~5가 attachments, `ServiceKey` 파라미터 → `TestNaraExtended::test_pre_specs_mapping`
   - [x] 낙찰: status가 항상 `closed`, extra에 낙찰자·낙찰률·참가자 수 → `test_awards_mapping`
   - [x] 계약: bid_no = `계약-{type}-{dcsnCntrctNo}` → `test_contracts_mapping`
+  - [x] (v1.3.1, Phase 008) 계약 제목은 업무별 태그 — 용역·물품 `cntrctNm`, 공사 `cnstwkNm`. 공사 N건(제목 `cnstwkNm`만) → N건 반환·제목 일치·건너뜀 경고 0
+    → `test_contracts_construction_all_items_kept`. 종전엔 `cntrctNm`만 봐서 공사가 전건 건너뛰어졌다(2026-09-25 실측 공사 1일 61/61건 → 수정 후 61건 반환)
   - [x] API 에러 응답 시 예외가 호출자에게 그대로 전파된다(부분 결과 없음 — 반환형이 list라 errors를 담을 곳이 없다, CONTRACT.md) → `test_api_error_propagates`
   - [x] (v1.1) 요청 재시도 소진도 조용한 빈 결과가 아니라 `RuntimeError`, 메시지에 키 없음 → `test_request_failure_raises_masked`
   - [x] (v1.2.5, Phase 006 A) ID(낙찰 `bidNtceNo`·계약 `dcsnCntrctNo`|`untyCntrctNo`·사전규격 `bfSpecRgstNo`|`refNo`)나 제목(낙찰 `bidNtceNm`·계약 `cntrctNm`)이 없는 항목은
-    `낙찰-용역-`처럼 접두사만으로 합쳐지지 않고 건너뛴다 — 3건 입력 시 0건, 경고 로그에 사유별 건수(반환형이 list라 errors 채널 없음 — CONTRACT.md)
+    `낙찰-용역-`처럼 접두사만으로 합쳐지지 않고 건너뛴다(계약 제목은 v1.3.1부터 `cntrctNm`|`cnstwkNm`) — 3건 입력 시 0건, 경고 로그에 사유별 건수(반환형이 list라 errors 채널 없음 — CONTRACT.md)
     → `TestNaraExtended::test_awards_without_id_are_skipped_not_merged`·`test_contracts_without_id_are_skipped_not_merged`·`test_pre_specs_without_id_are_skipped_not_merged`(caplog)
   - [x] (v1.2.5, 원칙 ①) 확장 3메서드의 `extra`도 응답 태그 전부·원래 이름(`bid_type`·`data_type` 없음) → `test_awards_mapping`
-- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23, 빈 ID 병합 방지·원문 extra 2026-09-25 v1.2.5)
+- **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23, 빈 ID 병합 방지·원문 extra 2026-09-25 v1.2.5,
+  계약 공사 제목 태그 2026-09-25 v1.3.1)
 
 ### F-003: K-Startup 사업공고 수집 (`KstartupCollector`)
 - **설명**: odcloud 형식 JSON. 접수시작일이 cutoff(자정 절삭) 이전이면 제외. `only_ongoing=True`(기본)면
@@ -107,7 +111,12 @@
   - [x] `only_ongoing=True`면 `cond[rcrt_prgs_yn::EQ]=Y`를 보낸다 → `test_only_ongoing_param`
   - [x] 여러 페이지 수집 → `test_multi_page_pagination`
   - [x] HTTP·네트워크 오류 시 예외 없이 반환하고 errors에 원인 → `test_http_error_graceful`·`test_network_error_graceful`
-- **상태**: 완료 (2026-04-06)
+  - [x] (v1.3.1, Phase 008) 페이지 종료·절단 문구의 전체 건수는 필터 적용 후 `matchCount`(`totalCount`는 필터 무관 전체) — matchCount 150·totalCount 30000에서
+    요청 2회, max_pages=1이면 "전체 150건 중" → `test_pagination_stops_at_match_count_not_total`·`test_truncation_message_reports_match_count`
+    (2026-09-25 실측: 진행중 matchCount 230·totalCount 30,168, 요청 4→3회, 수집 228건 동일)
+  - [x] (v1.3.1) odcloud `code < 0` 응답은 errors에 코드·메시지(보조금24와 같은 검사) → `test_odcloud_error_code_reported`
+    (실측상 잘못된 키는 게이트웨이 403으로 와서 HTTP 오류 경로를 탄다 — 이 검사는 방어용)
+- **상태**: 완료 (2026-04-06, matchCount·code 검사 2026-09-25 v1.3.1)
 
 ### F-004: 기업마당 지원사업 수집 (`BizinfoCollector`)
 - **설명**: 별도 키 `BIZINFO_API_KEY`. API에 날짜 필터가 없어 전체를 받으며 `creatPnttm` 기준 클라이언트 필터.
@@ -136,15 +145,15 @@
 - **상태**: 완료 (2026-04-06, cutoff 자정 절삭·서버 필터 형식 수정 2026-09-23 Phase 004)
 
 ### F-006: 중소벤처기업부 사업공고 수집 (`SmesCollector`)
-- **설명**: XML, **HTTP**(HTTPS 아님) 엔드포인트. `startDate`/`endDate` 서버 필터. 예산은 `suptScale` 첫 숫자.
+- **설명**: XML, **HTTP**(HTTPS 아님) 엔드포인트. `startDate`/`endDate` 서버 필터. 예산 없음(응답에 지원 규모 태그가 없다).
 - **수용 기준**:
   - [x] bid_no = `MSS-{itemId}` → `test_bid_no_format`
-  - [x] 예산을 지원규모 문자열에서 추출, 없으면 None → `test_budget_parsing_from_suptscale`·`test_budget_none_when_missing`
+  - [x] budget은 항상 None → `test_budget_always_none` (v1.3.1: 종전 `suptScale` 손 매핑은 명세 swagger 11키·실측 88건에 없는 태그라 삭제 — 값 불변)
   - [x] fileName/fileUrl 쌍 추출(이름 부족 시 `첨부파일N`) → `TestExtractAttachments` 3건
   - [x] content 500자 절단 → `test_content_truncation_500_chars`
   - [x] HTTP 오류·XML 에러 응답 시 0건 + errors에 원인 → `test_http_error_returns_empty`·`test_xml_error_response_returns_empty`
   - [x] 2페이지 resultCode 에러 시 1페이지 보존 → `test_second_page_xml_error_keeps_first_page`
-- **상태**: 완료 (2026-04-06)
+- **상태**: 완료 (2026-04-06, 없는 예산 원천 제거 2026-09-25 v1.3.1)
 
 ### F-007: GenericScraper — config 기반 HTML 게시판 수집 (`GenericScraper` / `ScraperConfig`)
 - **설명**: `ScraperConfig`(Pydantic)로 검증한 설정만으로 임의 게시판을 파싱. GET page/offset·POST form/JSON·

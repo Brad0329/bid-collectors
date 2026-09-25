@@ -44,8 +44,7 @@ SAMPLE_ITEM_XML = """\
   <applicationEndDate>2026-04-30</applicationEndDate>
   <viewUrl>https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=126&amp;bcIdx=1234</viewUrl>
   <writerPosition>수출지원과</writerPosition>
-  <writer>중소벤처기업부</writer>
-  <suptScale>5,000,000원</suptScale>
+  <writerName>홍길동</writerName>
   <fileName>공고문.hwp</fileName>
   <fileUrl>https://www.mss.go.kr/download/file1.hwp</fileUrl>
   <fileName>신청서.hwp</fileName>
@@ -148,14 +147,8 @@ class TestItemToNotice:
         notice = _item_to_notice(item)
         assert len(notice.content) <= 500
 
-    def test_budget_parsing_from_suptscale(self):
-        """suptScale '5,000,000원' → budget 5000000."""
-        item = self._make_item()
-        notice = _item_to_notice(item)
-        assert notice.budget == 5000000
-
-    def test_budget_none_when_missing(self):
-        """suptScale 없으면 budget은 None."""
+    def test_budget_always_none(self):
+        """응답에 지원 규모 태그가 없다(명세 11키·실측 88건) — budget은 항상 None(v1.3.1 손 매핑 삭제)."""
         xml = """\
 <item>
   <itemId>TEST002</itemId>
@@ -190,8 +183,7 @@ class TestItemToNotice:
         item = self._make_item()
         notice = _item_to_notice(item)
         assert notice.extra is not None
-        assert notice.extra["suptScale"] == "5,000,000원"
-        assert notice.extra["writer"] == "중소벤처기업부"
+        assert notice.extra["writerName"] == "홍길동"
         assert notice.extra["fileName"] == ["공고문.hwp", "신청서.hwp"]
         assert notice.extra["fileUrl"] == [
             "https://www.mss.go.kr/download/file1.hwp", "https://www.mss.go.kr/download/file2.hwp",

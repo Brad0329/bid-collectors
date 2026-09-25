@@ -2,7 +2,7 @@
 
 API: https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01
 인증: serviceKey (DATA_GO_KR_KEY)
-응답: JSON (odcloud 형식 — data 배열, totalCount)
+응답: JSON (odcloud 형식 — data 배열, matchCount = 필터 적용 후 건수, totalCount = 필터 무관 전체)
 """
 
 import logging
@@ -61,12 +61,20 @@ class KstartupCollector(BaseCollector):
                     errors.append(msg)
                     break
 
+                if "code" in data and data["code"] < 0:
+                    msg = self._mask(f"페이지 {page} API 에러: {data['code']} - {data.get('msg', '')}")
+                    logger.error(f"[K-Startup] {msg}")
+                    errors.append(msg)
+                    break
+
                 items = data.get("data", [])
                 if not items:
                     break
 
                 pages_processed += 1
-                total_count = data.get("totalCount", 0)
+                # 필터(cond) 적용 후 건수 — totalCount는 필터와 무관한 전체 건수(실측 30168 vs 진행중 230)라
+                # 종료 판정이 늦어 빈 페이지를 1회 더 불렀다(v1.3.1, 보조금24와 같은 방식)
+                total_count = data.get("matchCount", 0)
 
                 for item in items:
                     try:

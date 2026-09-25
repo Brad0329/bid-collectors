@@ -300,6 +300,40 @@ class TestKstartupCollectorFetch:
         assert pages == 2
         assert len(notices) == 2
 
+    # v1.3.1 — 진행중 필터 결과 건수(matchCount)로 끝낸다. totalCount(필터 무관 전체, 실측 30168 vs 230)로 판정하면 빈 페이지를 더 부른다
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_pagination_stops_at_match_count_not_total(self):
+        pages_json = [
+            {**_make_api_response([{**SAMPLE_ITEM, "pbanc_sn": 100 + i}], total_count=150), "totalCount": 30000}
+            for i in range(3)
+        ]
+        route = respx.get(API_URL).mock(side_effect=[httpx.Response(200, json=j) for j in pages_json]
+                                        + [httpx.Response(200, json=_make_api_response([], total_count=150))])
+
+        notices, pages, errors = await KstartupCollector(api_key="test-key")._fetch(days=30)
+        assert route.call_count == 2
+        assert pages == 2 and len(notices) == 2 and errors == []
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_truncation_message_reports_match_count(self):
+        respx.get(API_URL).mock(return_value=httpx.Response(
+            200, json={**_make_api_response([SAMPLE_ITEM], total_count=150), "totalCount": 30000}))
+
+        _, _, errors = await KstartupCollector(api_key="test-key")._fetch(days=30, max_pages=1)
+        assert len(errors) == 1 and "전체 150건 중" in errors[0]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_odcloud_error_code_reported(self):
+        """odcloud는 200에 code<0 에러를 싣는다 — 빈 결과가 아니라 errors로(보조금24와 같은 검사)."""
+        respx.get(API_URL).mock(return_value=httpx.Response(200, json={"code": -4, "msg": "등록되지 않은 인증키 입니다."}))
+
+        notices, pages, errors = await KstartupCollector(api_key="test-key")._fetch(days=30)
+        assert notices == [] and pages == 0
+        assert len(errors) == 1 and "API 에러: -4" in errors[0]
+
     @pytest.mark.asyncio
     @respx.mock
     async def test_only_ongoing_param(self):

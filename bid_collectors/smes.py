@@ -154,18 +154,6 @@ def _item_to_notice(item: etree._Element) -> Notice:
 
     view_url = t("viewUrl")
 
-    # 예산/규모 파싱
-    budget_raw = t("suptScale") or t("supt_scale")
-    budget = None
-    if budget_raw:
-        import re
-        nums = re.findall(r"[\d,]+", budget_raw)
-        if nums:
-            try:
-                budget = int(nums[0].replace(",", ""))
-            except ValueError:
-                pass
-
     # 첨부파일
     attachments = _extract_attachments(item)
 
@@ -180,7 +168,8 @@ def _item_to_notice(item: etree._Element) -> Notice:
         url=view_url,
         detail_url=view_url,
         content=content[:500] if content else "",
-        budget=budget,
+        # 예산 없음 — 응답에 지원 규모 태그가 없다(명세 swagger 11키·실측 88건). 종전 suptScale 손 매핑은 없는 태그라 항상 None이었다(v1.3.1)
+        budget=None,
         category=t("writerPosition"),
         attachments=attachments,
         extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 반복 태그 fileName·fileUrl은 list

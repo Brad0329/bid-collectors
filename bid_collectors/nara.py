@@ -116,13 +116,9 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     budget = int(float(budget_raw)) if budget_raw else None
     est_price = int(float(est_price_raw)) if est_price_raw else None
 
-    # 첨부파일: 공고첨부 + 규격서 병합
+    # 첨부파일: 공고규격서. 종전의 공고첨부 bidNtceFlNm/Url{i} 루프는 명세·실측(용역/물품/공사 1310/1108/942건)에 없는 태그라 삭제(v1.3.1).
+    # 그 밖의 첨부(e발주 등)는 목록 응답에 없고 별도 오퍼레이션(getBidPblancListInfoEorderAtchFileInfo)에만 있다
     attachments = []
-    for i in range(1, 11):
-        fname = t(f"bidNtceFlNm{i}")
-        furl = t(f"bidNtceFlUrl{i}")
-        if fname and furl:
-            attachments.append({"name": fname, "url": furl})
     for i in range(1, 11):
         furl = t(f"ntceSpecDocUrl{i}")
         if furl:
@@ -206,7 +202,10 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     cntrct_no = t("dcsnCntrctNo") or t("untyCntrctNo")
-    require_fields(cntrctNo=cntrct_no, cntrctNm=t("cntrctNm"))  # 빈 ID는 `계약-용역-`로 합쳐진다(v1.2.5 A)
+    # 제목 태그가 업무마다 다르다 — 용역·물품 cntrctNm, 공사 cnstwkNm(명세·2026-09-25 실측 100/40/61건 전부).
+    # 종전엔 cntrctNm만 봐서 공사가 전건 건너뛰어졌다(v1.3.1)
+    title = t("cntrctNm") or t("cnstwkNm")
+    require_fields(cntrctNo=cntrct_no, cntrctNm=title)  # 빈 ID는 `계약-용역-`로 합쳐진다(v1.2.5 A)
     cntrct_date = parse_date(t("cntrctCnclsDate")) or ""
     cntrct_end = parse_date(t("cntrctPrd")) or ""
 
@@ -218,7 +217,7 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     return Notice(
         source="나라장터",
         bid_no=f"계약-{bid_type}-{cntrct_no}",
-        title=t("cntrctNm"),
+        title=title,
         organization=t("cntrctInsttNm"),
         start_date=cntrct_date or None,
         end_date=cntrct_end or None,

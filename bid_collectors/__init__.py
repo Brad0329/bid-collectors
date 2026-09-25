@@ -13,6 +13,7 @@ from .alio import AlioCollector
 from .lh import LhCollector
 from .kogas import KogasCollector
 from .d2b import D2bCollector
+from .kwater import KwaterCollector
 from .generic_scraper import GenericScraper, ScraperConfig
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "LhCollector",
     "KogasCollector",
     "D2bCollector",
+    "KwaterCollector",
     "GenericScraper",
     "ScraperConfig",
 ]

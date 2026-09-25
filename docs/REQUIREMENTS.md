@@ -282,7 +282,8 @@
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)
 - **설명**: `apis.data.go.kr/B500001/ebid/tndr3/{cntrwkList,servcList,gdsList,dmscptList}`(15101635) — JSON, 날짜 필터는 **월 단위 `searchDt=YYYYMM`**(공고일 기준) 하나뿐 →
-  기준일이 든 달부터 이번 달까지 받아 공고일(`tndrPblancDe`, 정수)로 거른다. **약 51KB 초과 응답은 HTTP 200 + 빈 본문** → numOfRows 50, 빈 본문은 실패.
+  기준일이 든 달부터 이번 달까지 받아 공고일(`tndrPblancDe`, 정수)로 거른다. **큰 응답은 HTTP 200 + 빈 본문**, **페이지 정렬이 불안정**(나눠 받으면
+  같은 행이 두 페이지에 나오고 그만큼 다른 공고가 빠진다 — 2026-09-26 용역 142건 중 4건) → 한 페이지 1000건으로 전량, 빈 본문이면 50건씩 나누고 겹친 행 수를 errors로.
   JSON `items`는 0건이면 `""`, 1건이면 dict. 에러와 0건 구분 불가(`searchDt` 누락·미래 월도 00/0) — 요청 인자를 코드로 보장.
   bid_no = `KWATER-{tndrPbanno}`. organization "한국수자원공사", end_date = `tndrPblancEnddt`(`-`는 없음), category = `cntrctDivNm`,
   url = `ebid.kwater.or.kr/fz?bidno=`. 취소 공고는 API에서 빠진다. 범위 밖: 사전규격·발주계획(공고번호 없음)·입찰결과.
@@ -291,6 +292,8 @@
   - [ ] `items`가 `""`(0건)·dict(1건)·list 모두 처리 → `test_items_shapes`(3)
   - [ ] 기준일이 전월이면 전월·당월 두 달을 요청하고 공고일로 거른다 → `test_month_span_and_cutoff_filter`
   - [ ] 마감일 `-` → end_date None, 항목은 유지 → `test_dash_deadline_is_none`
+  - [ ] 달마다 한 페이지(numOfRows 1000) 1회, 빈 본문이면 50건씩 나눠 받고 겹친 행 수를 errors에(회귀 — 실측 4건 누락)
+    → `test_collects_four_operations_with_params` · `test_falls_back_to_small_pages_and_reports_overlap`
 - **상태**: 진행
 
 ## 비기능 요구사항

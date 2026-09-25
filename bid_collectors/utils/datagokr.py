@@ -18,6 +18,9 @@ logger = logging.getLogger("bid_collectors")
 
 Parser = Callable[[bytes], tuple[list, int]]
 
+# 빈 본문 오류 문구 — 수집기가 "한 페이지로 받기엔 크다"를 알아보고 나눠 받는 데 쓴다(kwater)
+EMPTY_BODY_MSG = "빈 응답 본문(HTTP 200)"
+
 
 def parse_xml(content: bytes, nodata_codes: tuple[str, ...] = ()) -> tuple[list[etree._Element], int]:
     """XML 응답 → (item 목록, totalCount). 실패는 ValueError.
@@ -27,7 +30,7 @@ def parse_xml(content: bytes, nodata_codes: tuple[str, ...] = ()) -> tuple[list[
     """
     body = content.strip()
     if not body:
-        raise ValueError("빈 응답 본문(HTTP 200) — 응답 크기 초과 등 서버 오류 의심")
+        raise ValueError(f"{EMPTY_BODY_MSG} — 응답 크기 초과 등 서버 오류 의심")
     root = etree.fromstring(body)
 
     code = root.findtext(".//resultCode")

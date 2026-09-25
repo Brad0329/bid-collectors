@@ -21,10 +21,10 @@ import respx
 
 import bid_collectors
 from bid_collectors import (
-    AlioCollector, BaseCollector, BizinfoCollector, D2bCollector, KogasCollector, KstartupCollector, LhCollector,
-    NaraCollector, SmesCollector, Subsidy24Collector,
+    AlioCollector, BaseCollector, BizinfoCollector, D2bCollector, KogasCollector, KstartupCollector, KwaterCollector,
+    LhCollector, NaraCollector, SmesCollector, Subsidy24Collector,
 )
-from bid_collectors import alio, bizinfo, d2b, kogas, kstartup, lh, nara, smes, subsidy24
+from bid_collectors import alio, bizinfo, d2b, kogas, kstartup, kwater, lh, nara, smes, subsidy24
 
 TODAY = datetime.now()
 
@@ -82,6 +82,19 @@ def _mock_d2b(items):
     for spec in d2b.LISTS:
         body = _xml(items) if spec.kind == "국내경쟁" else _xml([])
         respx.get(d2b.BASE_URL + spec.operation).mock(return_value=httpx.Response(200, content=body))
+
+
+def _mock_kwater(items):
+    def month(request):  # 기준일이 전월이면 두 달을 부른다 — 이번 달에만 항목을 싣는다
+        mine = items if request.url.params["searchDt"] == TODAY.strftime("%Y%m") else []
+        shaped = "" if not mine else {"item": mine}
+        return httpx.Response(200, json={"response": {"header": {"resultCode": "00"},
+                                                      "body": {"items": shaped, "totalCount": len(mine)}}})
+    for op in kwater.OPERATIONS:
+        route = respx.get(kwater.BASE_URL + op)
+        route.mock(side_effect=month) if op == "servcList" else route.mock(
+            return_value=httpx.Response(200, json={"response": {"header": {"resultCode": "00"},
+                                                                "body": {"items": "", "totalCount": 0}}}))
 
 
 @dataclass
@@ -157,6 +170,12 @@ CASES = {
         lambda i: {"g2bPblancNo": i, "pblancOdr": "1", "bidNm": f"공고{i}", "pblancDate": TODAY.strftime("%Y%m%d")},
         "g2bPblancNo", "bidNm", "0", "biddocPresentnClosDt",
         # XML은 값이 전부 문자열이고 날짜는 선택 필드라 "형식 이상"을 만들 수 없다 → bad_format 없음
+    ),
+    KwaterCollector: Case(  # 오퍼레이션 4종 중 용역에만 항목을 싣는다(_mock_kwater)
+        lambda: KwaterCollector(api_key="k"), _mock_kwater,
+        lambda i: {"tndrPbanno": i, "tndrPblancNm": f"공고{i}", "tndrPblancDe": int(TODAY.strftime("%Y%m%d"))},
+        "tndrPbanno", "tndrPblancNm", 0, "tndrPblancEnddt",
+        bad_format={"tndrPblancDe": "날짜아님"},
     ),
 }
 

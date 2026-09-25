@@ -83,14 +83,14 @@
 - [ ] Phase 006: v1.2.5 — 항목 잔여 결함 A·B + 원칙 ① `extra` 원문 전부 전달 (F-001~F-006·F-010, F-002 확장 3메서드) — **계약 불변(`extra`는 계약 밖, 시그니처·bid_no 불변) → patch 1.2.4 → 1.2.5**
   - 출처: 2026-09-25 세션 평가(Phase 005 잔여 A·B) + 같은 날 사용자 확정 최상위 원칙(`docs/CONTRACT.md` 설계 원칙 첫 항목, 발급 2026-09-25).
     원칙 ②(표준 필드 파생 제거)는 이 Phase 범위 밖 — 소비자 값이 바뀌어 일반 트랙으로 따로 발급.
-  - 트랙: 저위험. 단 BidWatch 화면이 `extra`의 영어 키를 읽고 있어(아래 4) 그쪽 후속이 같은 시기에 필요 → 완료 시 bidwatch `backend/tests` 통과 + "사용자 실테스트 대기"에 대응표.
+  - 트랙: 저위험. 단 BidWatch 화면이 `extra`의 영어 키를 읽고 있어(아래 4) 그쪽 후속이 같은 시기에 필요 → 완료 시 bidwatch `backend/tests` 통과(읽기·실행만) + handover 문서 `docs/handover/v1.2.5.md`(대응표 포함).
   - **착수 전 확인 6건 (기본안 — 확인되면 "확정"으로 고친다)**:
     ① BidWatch가 읽는 영어 키 26개(4 참조) → **기본안: 원문 이름만 넘긴다(두 이름 병기는 원칙 위반). BidWatch `NoticeModal.tsx`가 원문 이름을 읽도록 고치고, 기존 DB 행은 오픈 전 1개월 재수집(upsert)으로 교체.**
     ② 요청 문맥 `bid_type`·`data_type`(응답에 없는 값) → **기본안: `extra`에서 뺀다 — `bid_no` 접두사(`용역-`·`낙찰-용역-`)에 이미 있다.** BidWatch의 "입찰 구분" 표시는 bid_no에서 자른다.
     ③ "비어 있지 않은"의 정의 → **기본안: None·빈 문자열·공백만 제외, 0·False·"0"은 포함.**
     ④ 형태 → **기본안: XML 반복 태그(중소벤처 `fileName`×N)는 list, 자식이 있는 태그는 dict, 값은 텍스트 그대로(숫자 변환 없음) / JSON은 값 타입·중첩 그대로.**
     ⑤ HTML이 든 값(K-Startup `aply_trgt_ctnt` 등, 지금은 clean_html 적용) → **기본안: 원문 그대로 — 표시용 정리는 BidWatch 몫.**
-    ⑥ `docs/interface.md` §1 `extra` 설명·예시 갱신(양쪽 저장소) + CONTRACT.md 변경 이력 예정 행 확정.
+    ⑥ `docs/interface.md` §1 `extra` 설명·예시 갱신(여기서만 — bidwatch 쪽 반영은 handover로, 머리말 "양쪽 모두 업데이트"도 그때 고친다) + CONTRACT.md 변경 이력 예정 행 확정.
   1. **A — 나라장터 확장 3메서드 빈 ID 병합 방지**: `_award_item_to_notice`(`bidNtceNo`·`bidNtceNm`)·`_contract_item_to_notice`(`dcsnCntrctNo`|`untyCntrctNo`·`cntrctNm`)·
      `_prespec_item_to_notice`(`bfSpecRgstNo`|`refNo`)에 `require_fields`. `_fetch_extended`(nara.py:522)는 반환형이 list라 errors 채널이 없다 → `_record_skip`으로 세고
      끝에 `_skip_message`를 **경고 로그**로(보고 채널 추가 = 선택 인자 = minor, 보류에 기록). 테스트: ID 없는 3건 → 0건(합쳐진 1건이 아님) + caplog에 "3건".
@@ -102,18 +102,19 @@
      헬퍼가 대체하므로 함께 사라진다(attachments 표준 필드의 `ntceSpecDocUrl` 루프는 유지). 테스트: 공통 계약 테스트에 "모르는 필드가 든 항목 → extra 키 집합 == 비어 있지 않은 필드 집합,
      이름 바뀐 키 0개, 0 포함, 빈 값 제외"(수집기별 parametrize, XML 반복 태그 1건) / 통합: 나라장터 3서비스·나머지 4곳 1페이지에서 항목마다 `len(extra) == 비어 있지 않은 필드 수`(건수 기록).
      기존 테스트 기대 변경: extra 영어 키를 단언하는 테스트(nara `test_awards_mapping`·`test_contracts_mapping`·`test_pre_specs_mapping` 등) → 원문 이름.
-  4. **BidWatch 후속(bidwatch 세션 몫 — 완료 시 "사용자 실테스트 대기"로)**: `frontend/src/components/notices/NoticeModal.tsx` NaraExtra·GeneralExtra 키 대응.
+  4. **BidWatch 후속(bidwatch 세션 몫 — handover 문서 `docs/handover/v1.2.5.md`로 전달, 여기서 bidwatch 파일은 수정하지 않는다)**: `frontend/src/components/notices/NoticeModal.tsx` NaraExtra·GeneralExtra 키 대응.
      나라장터: est_price→`presmptPrce`, budget→`asignBdgtAmt`, bid_method→`bidMethdNm`, contract_method→`cntrctCnclsMthdNm`(종전엔 오타로 항상 빈값), award_method→`sucsfbidMthdNm`,
      contact→`ntceInsttOfclNm`+`ntceInsttOfclTelNo`, contact_email→`ntceInsttOfclEmailAdrs`|`dminsttOfclEmailAdrs`, tech_eval_ratio→`techAbltEvlRt`, price_eval_ratio→`bidPrceEvlRt`,
      bid_qual→`bidQlfctRgstDt`(종전 오타), open_date→`opengDt`, bid_type→bid_no 접두사 / K-Startup: apply_method→`aply_mthd_onli_rcpt_istc`|`aply_mthd_vst_rcpt_istc`|`aply_mthd_etc_istc`,
      biz_name→`intg_pbanc_biz_nm`, biz_year→`biz_enyy`, contact→`prch_cnpl_no`, department→`biz_prch_dprt_nm`, excl_target→`aply_excl_trgt_ctnt`, target→`aply_trgt_ctnt`, target_age→`biz_trgt_age` /
      기업마당: reference→`refrncNm`, req_method→`reqstMthPapersCn`, sub_category→`pldirSportRealmMlsfcCodeNm`, target→`trgetNm`, view_count→`inqireCo`, hashtags 동일.
      확장 3메서드·보조금24·중소벤처 키는 읽는 곳 없음(2026-09-25 grep). `backend/app/services/notice.py:27` fetch_detail 병합은 F-008 영어 키 그대로(이번 범위 밖).
-  5. **버전** 1.2.4 → 1.2.5(`pyproject.toml`·`__init__.py`) · CONTRACT.md 변경 이력 행 반영 칸 · interface.md §1 양쪽 · CLAUDE.md:3·plan.md:13의 "v1.1.0" 표기를 현재 버전으로.
+  5. **버전** 1.2.4 → 1.2.5(`pyproject.toml`·`__init__.py`) · CONTRACT.md 변경 이력 행 반영 칸 · interface.md §1(여기) · handover 문서 작성 · CLAUDE.md:3·plan.md:13의 "v1.1.0" 표기를 현재 버전으로.
   - 범위 밖(이유): 원칙 ②(status 추정·budget 대체·category 합성·content 절단·organization 상수·only_ongoing 기본값 — 소비자 값이 바뀌어 일반 트랙) / 공사 배정예산 `bdgtAmt`(budget 표준 필드 = 원칙 ②) /
     GenericScraper의 원문 전부(HTML 행에는 필드 이름이 없다 — 별도 설계, 보류) / `fetch_detail` 반환 dict의 원문화(F-008, BidWatch 병합 로직과 함께) / `_fetch_extended` 보고 채널(선택 인자 = minor).
   - 완료 조건: REQUIREMENTS 원칙 ① `[x]` + F-002 A 기준 + 공통 계약 B 기준 각각 테스트 대응(변이 확인) · 전체 테스트 0 failed · 실측(위 3의 통합, 표본 수 기록) ·
-    BidWatch `backend/tests` 통과 · "사용자 실테스트 대기"에 4의 대응표 한 줄 · 버전 1.2.5.
+    BidWatch `backend/tests` 통과(읽기·실행만) · handover 문서 `docs/handover/v1.2.5.md`(4의 대응표·interface.md diff·검증법·되돌리기) +
+    "사용자 실테스트 대기"에 링크 한 줄 · 버전 1.2.5.
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
@@ -150,6 +151,10 @@
 - 원칙 ② `status` 처리 방식(제거=major / 출처 명시값만 / BidWatch가 end_date로 계산) — REQUIREMENTS 미결 질문
 
 ## 사용자 실테스트 대기
+
+> 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
+> 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
+
 - **BidWatch 연동(bidwatch 세션 몫)** — ① 정기·시험 수집의 `GenericScraper(...)` 3곳(`tasks/collect_scraper.py`·`services/scraper_ai.py`·
   `routers/sources.py`)에 `event_hooks={"request": [guard_request]}` 꽂기 ② v1.1부터 `is_partial`/errors가 채워진다 —
   보조금24 정기 수집은 이제 절단 보고 대신 정상 건수(1일 24건 수준)로 온다, GenericScraper는 max_pages 절단이 errors로 온다(기본 3페이지)

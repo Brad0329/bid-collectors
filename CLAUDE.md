@@ -25,7 +25,9 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   ② 규칙 추가. 점검은 Phase 종료 시 `/approval-audit`. 대가·목록 실물: `노하우_승인_대기_최소화.md`
 - **비밀정보(API 키)는 이 파일·커밋·채팅에 절대 쓰지 않는다.** `.env`(`DATA_GO_KR_KEY`·`BIZINFO_API_KEY`)에 두고 gitignore한다.
 - **역할 경계**: 외부 사이트에서 공고를 가져오는 것은 전부 이 패키지 몫 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은
-  소비 서비스(BidWatch) 몫. 소비자 쪽 일을 여기서 받지 않는다.
+  소비 서비스(BidWatch) 몫. 소비자 쪽 일을 여기서 받지 않는다. **bidwatch 폴더의 파일은 이 저장소 세션에서 수정하지 않는다**
+  (읽기·grep·테스트 실행은 된다). 버전 작업을 끝내면 `docs/handover/v<버전>.md`(템플릿 `_TEMPLATE.md`)에 변경 상황과 bidwatch가
+  할 일을 적어 넘기고, 반영은 bidwatch 세션이 한다(2026-09-25 사용자 결정).
 
 ## 소비자 계약 변경 게이트 ★계약은 되돌리기 비싸다 (템플릿의 '스키마 변경 게이트'를 이 패키지에 맞게)
 - 이 패키지에는 DB가 없다 — 되돌리기 비싼 것은 **BidWatch가 기대하는 모양**이다. 계약 = `Notice`·`CollectResult`·
@@ -33,7 +35,8 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 - 계약 **결정의 기록 = `docs/CONTRACT.md`**, 계약 명세 = `docs/interface.md`.
 - **AI는 임의로 계약을 바꾸지 않는다.** ① 변경안(무엇을·왜·영향·버전)을 CONTRACT.md에 먼저 기록 → ② 사용자 확인 → ③ 반영.
 - **필드·선택 인자 추가 = minor, 제거·이름 변경·타입 변경·bid_no 형식 변경 = major.** 버전은 `pyproject.toml`과 `__init__.py` 둘 다.
-- **`docs/interface.md`는 bidwatch 저장소에 같은 문서가 있다 — 고치면 양쪽 다.** (2026-09-23 v1.1.0에서 동일하게 맞춤)
+- **`docs/interface.md`는 bidwatch 저장소에 같은 문서가 있다 — 여기서 고치고 handover 문서로 넘긴다.** bidwatch 쪽 파일은 그쪽 세션이
+  반영한다(2026-09-25까지는 양쪽을 여기서 맞췄다).
 - 코드가 "현재 상태"의 정답이다. 문서와 어긋나면 문서를 고친다. `extra` 안의 키는 계약 밖이다.
 
 ## 작업 트랙 ★저위험이 기본값이다 — 기준은 "몇 줄이냐"가 아니라 "되돌리기가 비싼가"
@@ -43,7 +46,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 - **일반 트랙은 ① 데이터 ② 기본 구조에 닿을 때만** — 그 외 전부(새 수집기·파싱 수정·문구·설정, 새 기능 포함)는
   저위험. 애매하면 저위험으로 시작하고, 닿으면 멈추고 **사용자에게 묻는다** —
   혼자 일반 트랙으로 올리지 않는다. 검증은 사다리의 **일반 트랙 갈래**(소비자 영향 확인·되돌리기 경로).
-  bid-collectors의 ②의 실물: **`docs/interface.md` 변경**(위 게이트 — 양쪽 저장소) · `BaseCollector._fetch()` 템플릿 메서드 구조 ·
+  bid-collectors의 ②의 실물: **`docs/interface.md` 변경**(위 게이트 — handover로 전달) · `BaseCollector._fetch()` 템플릿 메서드 구조 ·
   기존 수집기의 `bid_no` 형식. ①(데이터)은 해당 없음 — 저장소가 없다.
 - **저위험 실행**: 한 턴에 구현→검증(사다리대로)→**커밋**. 보고 10줄 이내, 커밋은
   묻지 않는다. 작업 중 발견한 무관 결함이 5분짜리면 그 자리에서 고친다(커밋만 나눈다).
@@ -139,7 +142,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   bid_collectors/       ← 패키지 (수집기 1개 = 모듈 1개, utils/ = 날짜·텍스트·상태·HTTP)
   tests/                ← 패키지 테스트 (pyproject testpaths — 고정 응답 + -m integration 실호출)
   tools_tests/          ← 동봉 파이썬 도구(훅·측정기·규칙 개수) 테스트 — 패키지 테스트와 섞지 않는다
-  docs/                 ← REQUIREMENTS.md, CONTRACT.md, interface.md, 설계 문서, playbooks/, archive/
+  docs/                 ← REQUIREMENTS.md, CONTRACT.md, interface.md, 설계 문서, playbooks/, archive/, handover/(버전별 bidwatch 인계서)
   work_log/             ← plan.md, Phase_XXX.md
   scripts/              ← 동봉 측정·점검 스크립트 (_tmp/ = 일회성, gitignore)
   ```
@@ -175,8 +178,9 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 1. 검증 — **트랙별로 다르다**: 저위험은 커밋 때 사다리대로 한 것 위에 **아무것도 더 얹지 않는다**.
    일반 트랙(계약 변경)은 전체 테스트 + BidWatch 쪽 테스트 실측 + 되돌리기 경로.
 2. 버전 — `pyproject.toml`의 `version`과 `bid_collectors/__init__.py`의 `__version__`을 **둘 다** 올린다(CONTRACT.md 버전 규칙).
-3. `docs/interface.md`가 바뀌었으면 bidwatch 쪽 같은 파일도 같은 작업에서 고친다.
-4. **실제 동작 확인** — bidwatch에서 `backend/.venv/Scripts/python.exe -m pytest backend/tests` 통과(같은 체크아웃을 editable로 설치).
+3. **handover 문서 작성** — `docs/handover/v<버전>.md`(템플릿 `_TEMPLATE.md`): 바뀐 것·`docs/interface.md` diff·bidwatch가 고칠 파일·검증법·되돌리기.
+   bidwatch 쪽 파일은 고치지 않는다 — 반영은 bidwatch 세션 몫.
+4. **실제 동작 확인(읽기·실행만)** — bidwatch의 `backend/.venv/Scripts/python.exe -m pytest backend/tests` 통과(같은 체크아웃을 editable로 설치).
 5. commit + push
 
 ## 알려진 함정 (스택 중립 + bid-collectors에서 겪은 것. 새로 겪으면 `_TEMPLATE.md` 형식으로 플레이북 추가 + 여기 한 줄)

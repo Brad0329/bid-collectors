@@ -80,11 +80,11 @@
   - 범위 밖(이유): `_fetch_extended`(낙찰·계약·사전규격)의 항목 건너뜀은 반환형 `list[Notice]`라 errors 채널이 없다(CONTRACT.md) — 로그만 유지, 바꾸면 major.
   - 완료 조건: REQUIREMENTS '공통 계약'의 (v1.2.4) 기준 3개 충족 + 수집기별 "null 필드 1건·빈 ID"에서 **건수를 재는** 테스트(변이 확인) ·
     전체 테스트 0 failed · 버전 1.2.3 → 1.2.4(`pyproject.toml`·`__init__.py` — 1.2.3은 알리오 누락 수정 5afbc99가 썼다)
-- [ ] Phase 006: v1.2.5 — 항목 잔여 결함 A·B + 원칙 ① `extra` 원문 전부 전달 (F-001~F-006·F-010, F-002 확장 3메서드) — **계약 불변(`extra`는 계약 밖, 시그니처·bid_no 불변) → patch 1.2.4 → 1.2.5**
-  (**구현 완료 2026-09-25, handover 문서 작성 대기(사용자 지시)** — 단위 421 passed·ruff 통과 / 실호출 extra 실측: 나라장터 3서비스 1페이지 300건·알리오 10건 전부
+- [x] Phase 006: v1.2.5 — 항목 잔여 결함 A·B + 원칙 ① `extra` 원문 전부 전달 (F-001~F-006·F-010, F-002 확장 3메서드) — **계약 불변(`extra`는 계약 밖, 시그니처·bid_no 불변) → patch 1.2.4 → 1.2.5**
+  (2026-09-25, 구현 `a5ceaa0` — 로그 없음(실패한 접근 없음). handover `docs/handover/v1.2.5.md` — 단위 421 passed·ruff 통과 / 실호출 extra 실측: 나라장터 3서비스 1페이지 300건·알리오 10건 전부
   `extra == 비어 있지 않은 필드` / 변이 14건 전부 잡힘(`scripts/_tmp/mutate_phase006.py`) / BidWatch `backend/tests` 118 passed(읽기·실행만) /
   qa-tester 합격: 441 passed/0 failed(실호출 20건 포함, 통합 errors는 절단 보고뿐·항목 건너뜀 0건) + 추가 실측 낙찰 용역 7일 155건·사전규격 1일 2건 —
-  bid_no 전부 고유, `-`로 끝나는 ID 0, extra 전부 원문 태그. 완료 조건 중 handover 문서만 남음)
+  bid_no 전부 고유, `-`로 끝나는 ID 0, extra 전부 원문 태그. 완료 조건 전부 충족 — BidWatch 반영은 handover §5에서 확인)
   - 출처: 2026-09-25 세션 평가(Phase 005 잔여 A·B) + 같은 날 사용자 확정 최상위 원칙(`docs/CONTRACT.md` 설계 원칙 첫 항목, 발급 2026-09-25).
     원칙 ②(표준 필드 파생 제거)는 이 Phase 범위 밖 — 소비자 값이 바뀌어 일반 트랙으로 따로 발급.
   - 트랙: 저위험. 단 BidWatch 화면이 `extra`의 영어 키를 읽고 있어(아래 4) 그쪽 후속이 같은 시기에 필요 → 완료 시 bidwatch `backend/tests` 통과(읽기·실행만) + handover 문서 `docs/handover/v1.2.5.md`(대응표 포함).
@@ -159,6 +159,8 @@
 > 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
 > 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
 
+- **v1.2.5 extra 원문 전부·확장 3메서드 빈 ID·선택 필드 null(bidwatch 세션 몫)** — `docs/handover/v1.2.5.md`. NoticeModal 키 26개 대응·interface.md 교체·
+  오픈 전 재수집·httpx 로거 레벨. 반영 확인은 그 문서 §5(2026-09-25 인계).
 - **BidWatch 연동(bidwatch 세션 몫)** — ① 정기·시험 수집의 `GenericScraper(...)` 3곳(`tasks/collect_scraper.py`·`services/scraper_ai.py`·
   `routers/sources.py`)에 `event_hooks={"request": [guard_request]}` 꽂기 ② v1.1부터 `is_partial`/errors가 채워진다 —
   보조금24 정기 수집은 이제 절단 보고 대신 정상 건수(1일 24건 수준)로 온다, GenericScraper는 max_pages 절단이 errors로 온다(기본 3페이지)

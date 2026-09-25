@@ -21,10 +21,10 @@ import respx
 
 import bid_collectors
 from bid_collectors import (
-    AlioCollector, BaseCollector, BizinfoCollector, KstartupCollector,
+    AlioCollector, BaseCollector, BizinfoCollector, KstartupCollector, LhCollector,
     NaraCollector, SmesCollector, Subsidy24Collector,
 )
-from bid_collectors import alio, bizinfo, kstartup, nara, smes, subsidy24
+from bid_collectors import alio, bizinfo, kstartup, lh, nara, smes, subsidy24
 
 TODAY = datetime.now()
 
@@ -68,6 +68,10 @@ def _mock_alio(items):
         result = items if request.url.params["pageNo"] == "1" else []
         return httpx.Response(200, json={"status": "success", "data": {"result": result, "totalCnt": len(items)}})
     respx.get(alio.API_URL).mock(side_effect=page)
+
+
+def _mock_lh(items):
+    respx.get(lh.API_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
 
 
 @dataclass
@@ -125,6 +129,12 @@ CASES = {
         lambda i: {"seq": i, "rtitle": f"공고{i}", "pname": "기관", "bdate": TODAY.strftime("%Y.%m.%d")},
         "seq", "rtitle", 0, "bidInfoEndDt",
         bad_format={"bdate": "날짜아님"},
+    ),
+    LhCollector: Case(
+        lambda: LhCollector(api_key="k"), _mock_lh,
+        lambda i: {"bidNum": i, "bidnmKor": f"공고{i}", "tndrbidRegDt": TODAY.strftime("%Y%m%d")},
+        "bidNum", "bidnmKor", "0", "tndrdocAcptEndDtm",
+        bad_format={"tndrbidRegDt": "날짜아님"},
     ),
 }
 

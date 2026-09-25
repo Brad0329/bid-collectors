@@ -10,6 +10,7 @@ from .subsidy24 import Subsidy24Collector
 from .kstartup import KstartupCollector
 from .smes import SmesCollector
 from .alio import AlioCollector
+from .lh import LhCollector
 from .generic_scraper import GenericScraper, ScraperConfig
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "KstartupCollector",
     "SmesCollector",
     "AlioCollector",
+    "LhCollector",
     "GenericScraper",
     "ScraperConfig",
 ]

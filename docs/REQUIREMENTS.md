@@ -267,13 +267,15 @@
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)
 - **설명**: `apis.data.go.kr/1690000/BidPblancInfoService`(15158416) 목록 5종 — XML(JSON은 `dcsNo`가 int/str로 섞인다). 오퍼레이션당 100회/일.
   국내경쟁·시설경쟁 = 공고일 범위(`anmtDateBegin/End`) / 국외경쟁 = 공고일 범위 + 개찰일(`opengDateBegin/End` 필수 — 기준일~1년 뒤) /
-  국내·시설 공개수의협상 = 공고일 필터가 없어 **견적서 제출마감 오늘~1년 뒤(진행 중 전량)**, start_date = `ntatPlanDate`.
-  bid_no = `D2B-{구분}-{키}-{차수}`(구분 국내경쟁·국외경쟁·시설경쟁 키 `g2bPblancNo`·차수 `g2bPblancOdr` / 국내수의 키 `{demandYear}{pblancNo}{dcsNo}`·
-  시설수의 키 `{pblancNo}{cntrwkNo}`, 차수 `pblancOdr`). organization = `ornt`(국외경쟁 목록엔 없어 "방위사업청" — 국외 조달은 방위사업청 직접),
+  국내·시설 공개수의협상 = 공고일 필터가 없어 **견적서 제출마감 오늘~1년 뒤(진행 중 전량)**, start_date None(공고일 필드 없음 — `ntatPlanDate`는 앞으로의 협상 예정일).
+  bid_no = `D2B-{구분}-{키}-{차수}`(구분 국내경쟁·국외경쟁·시설경쟁 키 `g2bPblancNo` / 국내수의 키 `{demandYear}{pblancNo}{dcsNo}`·
+  시설수의 키 `{pblancNo}{cntrwkNo}`, 차수 5종 모두 `pblancOdr` — `g2bPblancOdr`는 취소·정정에도 그대로라 쓰지 않는다, 2026-09-26 실측). organization = `ornt`(국외경쟁 목록엔 없어 "방위사업청" — 국외 조달은 방위사업청 직접),
   category = `busiDivs`, url = d2b 입찰공고 화면(상세 링크 필드 없음). 목록 하나가 실패해도 나머지 목록 결과는 보존.
 - **수용 기준**:
   - [ ] 공통 기준 전부
   - [ ] 5종 각각의 bid_no 형식·제목·마감 필드 → `test_bid_no_by_list`(5)
+  - [ ] 취소공고(같은 g2bPblancOdr, pblancOdr만 다름)는 원공고와 다른 bid_no(회귀 — 실측 7일 9건 합쳐짐) → `test_cancel_notice_is_separate_from_original`
+  - [ ] 수의 2종의 start_date는 None(협상 예정일을 공고일로 쓰지 않는다) → `test_negotiation_has_no_start_date`(2)
   - [ ] 목록 1종 실패 → 나머지 4종 결과 보존 + errors에 그 목록 이름 → `test_one_list_failure_keeps_others`
   - [ ] 국외경쟁 요청에 개찰일 범위, 수의 2종 요청에 견적서 마감 범위가 들어간다 → `test_list_date_params`
 - **상태**: 진행

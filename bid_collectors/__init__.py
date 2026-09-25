@@ -12,6 +12,7 @@ from .smes import SmesCollector
 from .alio import AlioCollector
 from .lh import LhCollector
 from .kogas import KogasCollector
+from .d2b import D2bCollector
 from .generic_scraper import GenericScraper, ScraperConfig
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "AlioCollector",
     "LhCollector",
     "KogasCollector",
+    "D2bCollector",
     "GenericScraper",
     "ScraperConfig",
 ]

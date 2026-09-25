@@ -21,10 +21,10 @@ import respx
 
 import bid_collectors
 from bid_collectors import (
-    AlioCollector, BaseCollector, BizinfoCollector, KogasCollector, KstartupCollector, LhCollector,
+    AlioCollector, BaseCollector, BizinfoCollector, D2bCollector, KogasCollector, KstartupCollector, LhCollector,
     NaraCollector, SmesCollector, Subsidy24Collector,
 )
-from bid_collectors import alio, bizinfo, kogas, kstartup, lh, nara, smes, subsidy24
+from bid_collectors import alio, bizinfo, d2b, kogas, kstartup, lh, nara, smes, subsidy24
 
 TODAY = datetime.now()
 
@@ -76,6 +76,12 @@ def _mock_lh(items):
 
 def _mock_kogas(items):
     respx.get(kogas.API_URL).mock(return_value=httpx.Response(200, content=_xml(items)))
+
+
+def _mock_d2b(items):
+    for spec in d2b.LISTS:
+        body = _xml(items) if spec.kind == "국내경쟁" else _xml([])
+        respx.get(d2b.BASE_URL + spec.operation).mock(return_value=httpx.Response(200, content=body))
 
 
 @dataclass
@@ -145,6 +151,12 @@ CASES = {
         lambda i: {"NOTICE_CODE": i, "NOTICE_NAME": f"공고{i}", "NOTICE_DT": TODAY.strftime("%Y-%m-%d")},
         "NOTICE_CODE", "NOTICE_NAME", "0", "END_DT",
         bad_format={"NOTICE_DT": "날짜아님"},
+    ),
+    D2bCollector: Case(  # 목록 5종 중 국내경쟁에만 항목을 싣는다(_mock_d2b)
+        lambda: D2bCollector(api_key="k"), _mock_d2b,
+        lambda i: {"g2bPblancNo": i, "pblancOdr": "1", "bidNm": f"공고{i}", "pblancDate": TODAY.strftime("%Y%m%d")},
+        "g2bPblancNo", "bidNm", "0", "biddocPresentnClosDt",
+        # XML은 값이 전부 문자열이고 날짜는 선택 필드라 "형식 이상"을 만들 수 없다 → bad_format 없음
     ),
 }
 

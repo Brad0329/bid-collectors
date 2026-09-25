@@ -130,6 +130,22 @@
   2. `interface.md` §2 · README 지원 현황 · 버전 1.3.0 · handover `docs/handover/v1.3.0.md` · "사용자 실테스트 대기"에 한 줄
   - 범위 밖: 요청서 §4 결함·불일치 10건(bidwatch `docs/source_fields.md` 부록 A) — 별도 발급.
   - 완료 조건: F-010 (v1.3.0) 기준 전부 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수 기록) · BidWatch `backend/tests` 통과 · handover.
+- [ ] Phase 008: 저위험 결함 5건 — bidwatch 필드 사전 부록 A #1·#3·#4·#9·#10 (F-002·F-001·F-006·F-003) — **계약 불변(표준 필드 값·bid_no·시그니처 불변) → patch 1.3.0 → 1.3.1**
+  - 출처: bidwatch `docs/source_fields.md` 부록 A(2026-09-25 필드 사전 조사, 요청서 `docs/requests/bid-collectors_alio_fetch_detail.md` §4). 발급 2026-09-25 사용자.
+    부록 A의 나머지 #2·#5·#6·#7·#8은 BidWatch가 받는 표준 필드 값(end_date·budget·region·organization·status)이 바뀌어 **일반 트랙** — 원칙 ② Phase에 합친다(이 Phase 범위 밖).
+  - 트랙: 저위험. BidWatch가 받는 값이 바뀌는 것은 #1(쓰지 않는 확장 메서드 `collect_contracts`)뿐 → handover는 참고 수준 한 장.
+  1. **#1 계약 공사 전건 누락** — `nara.py:209` `_contract_item_to_notice`가 제목을 `cntrctNm`으로 필수 검사하는데, 공사 응답의 제목 태그는 `cnstwkNm` → 공사 100/100건이 `require_fields`에서 건너뛰어진다(경고 로그만, 반환형 list라 errors 채널 없음).
+     제목 = `cntrctNm` 없으면 `cnstwkNm`(업무별 제목 태그 — 파생 아님). 착수 시 용역·물품의 제목 태그도 실측으로 확인. `bid_no` `계약-{업무}-{dcsnCntrctNo|untyCntrctNo}`는 그대로.
+     테스트: 공사 고정 응답(cnstwkNm만) N건 → N건 반환·제목 일치(변이 확인) / 실측: 계약 공사 1페이지 건수 ≠ 0, 건너뜀 경고 0.
+  2. **#3 죽은 코드** — `nara.py:121-125` 공고첨부 루프가 `bidNtceFlNm{i}`/`bidNtceFlUrl{i}`를 읽는데 명세·실측(용역/물품/공사 1310/1108/942건)에 없는 태그. 삭제(규격서 `ntceSpecDocUrl` 루프는 유지).
+     착수 시 명세에 공고 첨부에 해당하는 다른 태그가 있는지 확인 — 있으면 삭제가 아니라 원문 태그로 교체(그때 attachments 값이 늘어나므로 handover에 적는다).
+  3. **#4 없는 원천** — `smes.py:158` budget ← `suptScale`/`supt_scale`: 명세·실측 모두 없는 태그라 budget 항상 None. 손 매핑 삭제(값 None 그대로 — 소비자 값 불변).
+     착수 시 명세에서 지원 규모에 해당하는 태그가 있는지 확인 — 있으면 표준 필드 값이 생기는 변경이라 **멈추고 사용자에게 묻는다**(원칙 ② 영역).
+  4. **#9 K-Startup 종료 판정** — `kstartup.py:69` `total_count = data.get("totalCount")`: 진행중 필터(`cond[rcrt_prgs_yn::EQ]=Y`)를 걸어도 전체 건수로 페이지 종료를 판정 → 헛호출 추정(**미실측**).
+     먼저 실측(`totalCount`·`matchCount`·실제 받은 건수 비교, 표본 기록) → 맞으면 `matchCount`(보조금24 `subsidy24.py:84`와 같은 방식), 절단 보고 문구의 전체 건수도 그 값으로.
+     debt-audit 보류의 "K-Startup odcloud `code<0` 미검사·`totalCount` 사용"을 흡수 — `code<0` 검사도 함께(보조금24 대조). 테스트: matchCount < totalCount 고정 응답에서 요청 수(변이 확인).
+  5. **#10 문서 오기** — `docs/bid_collectors.md:26·107`의 `smes24.py`(중소벤처24 — Phase 003에서 **안 함**, `smes.py`가 같은 데이터)와 `docs/dev_reference.md:24` `mss_biz.py` → 현재 구조(`smes.py`)로. 원본 레퍼런스 성격이면 주석으로 대응만 표시.
+  - 완료 조건: 1·4 테스트 대응(변이 확인)·#1·#9 실측(표본 수 기록) · 전체 테스트 0 failed · 버전 1.3.1(`pyproject.toml`·`__init__.py`) · handover `docs/handover/v1.3.1.md`(계약 공사 수집 재개 + K-Startup 요청 수 변화) · REQUIREMENTS F-002·F-003 기준 추가.
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
@@ -190,7 +206,7 @@
 - **debt-audit 2026-09-24 (5afbc99 반영본)** — 1군(GenericScraper 정렬 가정·헛통과 테스트·공통 계약 테스트)은 Phase 005에 흡수(위 4~6). 나머지는 **결정 대기**:
   - 실측 필요: **기업마당 정렬 가정**(`bizinfo.py:81-84` "마지막 3건 전부 오래됨"에서 멈춤 — 5afbc99와 같은 유형, 실제 목록 순서 역전 수 미측정) ·
     K-Startup `fetch_detail`의 `cond[pbanc_sn::EQ]`가 실제로 먹는지(응답 ID ≠ 요청 ID 검사 없음 — 무시되면 다른 공고 본문을 조용히 반환)
-  - 저위험 결함: K-Startup odcloud `code<0` 미검사·`totalCount` 사용(보조금24는 `matchCount`) / 보조금24 `신청기한` 기간 형식이면 시작일이 end_date로 /
+  - 저위험 결함: ~~K-Startup odcloud `code<0` 미검사·`totalCount` 사용(보조금24는 `matchCount`)~~ → Phase 008 4로 흡수 / 보조금24 `신청기한` 기간 형식이면 시작일이 end_date로 /
     기업마당 날짜 형식 변경 시 cutoff 필터가 조용히 꺼짐 / 기업마당·K-Startup·보조금24 total이 문자열·null이면 TypeError로 전체 손실 /
     GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다") /
     (qa-tester 2026-09-25) httpx `_client` INFO 로그가 요청 URL의 `serviceKey`·`crtfcKey`를 평문으로 싣는다 — 이 패키지 로거가 아니라 소비자가

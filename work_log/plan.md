@@ -152,6 +152,15 @@
   5. **#10 문서 오기** — `docs/bid_collectors.md:26·107`의 `smes24.py`(중소벤처24 — Phase 003에서 **안 함**, `smes.py`가 같은 데이터)와 `docs/dev_reference.md:24` `mss_biz.py` → 현재 구조(`smes.py`)로. 원본 레퍼런스 성격이면 주석으로 대응만 표시.
   - 완료 조건: 1·4 테스트 대응(변이 확인)·#1·#9 실측(표본 수 기록) · 전체 테스트 0 failed · 버전 1.3.1(`pyproject.toml`·`__init__.py`) · handover `docs/handover/v1.3.1.md`(계약 공사 수집 재개 + K-Startup 요청 수 변화) · REQUIREMENTS F-002·F-003 기준 추가.
 
+- [ ] Phase 009: v1.4.0 — 자체조달 기관 수집기 4종 LH → 가스공사 → d2b → 수자원 (F-011~F-014) — **export·bid_no 추가 → minor 1.3.1 → 1.4.0**
+  - 출처: bidwatch 요청서 `bid-collectors_institution_collectors.md` ② 구현, 조사 `docs/institution_sources.md`, 계약 CONTRACT.md 2026-09-26 행(사용자 확인 2026-09-26).
+  - 트랙: 저위험(새 수집기) — 단 interface.md 목록 갱신·새 bid_no가 있어 계약 게이트를 탔다. 검증: 기관별 단위(사다리) + 실호출 통합 + BidWatch `backend/tests`(읽기·실행만).
+  1. `utils/datagokr.py` — data.go.kr XML 파싱(resultCode·빈 본문·EUC-KR) 공유 헬퍼
+  2. LH · 3. 가스공사 · 4. d2b · 5. 수자원 — 기관마다 수집기 + 단위 테스트 + `test_item_contract` 편입 + 커밋
+  6. 통합 테스트(실호출) · interface.md · README · 버전 1.4.0 · handover `docs/handover/v1.4.0.md`(기관별 1일 호출 수·금액 이름별 표시·알리오 연결 정규식)
+  - 범위 밖: 수자원 사전규격·발주계획(공고번호 없음)·입찰결과, d2b 상세·품목명세, 한전 포털(키 미발급), 코레일(비공식)
+  - 완료 조건: F-011~F-014 기준 `[x]` + 테스트 대응(변이 확인) · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
+
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
 - **원칙 ② Phase(일반 트랙)** — 표준 필드 파생 제거 + bidwatch 필드 사전 부록 A 남은 #2·#5·#6·#7·#8(end_date·budget·region·organization·status).

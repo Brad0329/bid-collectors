@@ -5,7 +5,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 
 ## 현재 단계
 - 전체 Phase 체크리스트/아키텍처의 **단일 원본 = `work_log/plan.md`** (여기에 중복 기재 금지)
-- 현재: **Phase 008 완료(2026-09-25, v1.3.1, handover `docs/handover/v1.3.1.md`) — 다음 Phase 미발급** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
+- 현재: **Phase 009 진행 — 자체조달 기관 수집기 4종(v1.4.0)** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
 
 ## 새 세션 시작 시
 - 훅(`session_context.py`)이 plan.md의 현재 Phase·읽을 Phase 로그·실테스트 대기를 주입한다 — 지시대로 읽는다.
@@ -97,7 +97,8 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   | F-008 | 상세 조회 fetch_detail | 완료 |
   | F-009 | 공통 유틸(날짜·HTML·상태·HTTP) | 완료 |
   | F-010 | 알리오 공공기관 입찰공고 수집 | 완료 (2026-09-24, v1.2.0 / fetch_detail v1.3.0) |
-  | **다음 번호** | **F-011** | |
+  | F-011~F-014 | 자체조달 기관 수집기 — LH·가스공사·국방 d2b·수자원 | 진행 (Phase 009, v1.4.0) |
+  | **다음 번호** | **F-015** | |
 
 ## 검증 원칙
 - **"됐다"는 실제 결과로 판단한다.** 테스트 통과·import 성공은 수집이 된다는 근거가 아니다.

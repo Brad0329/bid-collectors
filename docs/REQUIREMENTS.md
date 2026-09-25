@@ -41,6 +41,20 @@
     (새 수집기 편입 강제: `test_every_collector_has_a_case`)
   - [x] (v1.2.4, Phase 005, F-007) GenericScraper: 목록 행이 잡혔는데 제목·날짜 추출 결과 공고 0건·cutoff 이전 행 0건이면 errors에 셀렉터 불일치 의심과 행 수
     (목록 행 0개는 빈 게시판과 구분 불가라 보고하지 않음) → `test_generic_scraper::TestSelectorMismatch` 4건
+- **원칙 — 숨기지도 더하지도 않는다 (2026-09-25 사용자 확정, 결정 기록 `docs/CONTRACT.md` 설계 원칙 첫 항목)**: 출처가 주는 것은 전부
+  가져와 정확히 전달되는 형식으로 넘기고, 쓸지 말지는 BidWatch가 정한다. 아래 두 기준은 **모든 수집기(나라장터 확장 3메서드 포함)의 완료 기준**이다 —
+  새 수집기도 이 둘을 채워야 완료. 상태: **미착수**(2026-09-25 기록만, Phase 미발급).
+  - [ ] (원칙 ①) `extra`에 응답 항목의 비어 있지 않은 필드 전부가 원래 이름 그대로 담긴다 — 고정 응답의 비어 있지 않은 필드 수와 `extra` 키 수가
+    같고, 이름을 바꾼 키가 없다 → 테스트 없음. 현재 위반(2026-09-25 실측, 최근 3일 1페이지 100건 표본, `scripts/_tmp/nara_field_coverage.py`):
+    나라장터 응답 태그 중 용역 113개의 41개·물품 101의 40·공사 143의 37만 읽음 / 영어로 이름을 바꾼 키(나라장터 12개 등 수집기마다) /
+    이름이 틀려 항상 빈값인 키 2개(`cntrctMthdNm`→실제 `cntrctCnclsMthdNm`, `bidQlftcRgstDt`→`bidQlfctRgstDt`) / 공사 배정예산 `bdgtAmt` 미수신 /
+    300건 중 0건인 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`)를 읽는 죽은 코드
+  - [ ] (원칙 ②) 표준 필드는 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수·기본 필터가 없다 → 테스트 없음.
+    현재 위반(2026-09-25): `status`를 마감일로 추정(전 수집기 — 나라장터 취소공고 `ntceKindNm`가 ongoing으로 나감) · `budget` 배정예산→추정가격 대체(F-001) ·
+    `category` 대>중 합성(F-001) · `region`에 수요기관명 `dminsttNm`(F-001) · content 500자 절단(F-003·F-006) · organization 상수(F-006 "중소벤처기업부",
+    F-003 폴백 "창업진흥원") · `only_ongoing=True` 기본값(F-003). `only_business`(F-005)는 기본 False라 위반 아님 — 유지.
+  - 적용 트랙: ①은 계약 밖(`extra`) → 저위험 / ②는 BidWatch가 받는 값이 바뀜 → 일반 트랙(CONTRACT.md 변경안 → 사용자 확인 → 반영).
+    ②를 반영하면 F-001 budget·F-003 content 절단·only_ongoing·F-006 content 절단 기준은 그때 고쳐 쓴다(지금은 현재 동작 그대로 둔다).
 
 ## 기능 요구사항
 
@@ -198,3 +212,6 @@
 
 ## 미결 질문
 - 공기업 API 5종(LH·한전·도로공사·수자원공사·방위사업청)이 필요한가 — BidWatch 수요 확인 후 판단(plan.md '이후 단계').
+- (원칙 ②) `status`를 어떻게 할지 — 제거(계약 major) / 출처가 명시한 값만(나라장터 `ntceKindNm` 취소→`cancelled`, K-Startup `rcrt_prgs_yn`) /
+  BidWatch가 `end_date`로 계산. 기본값 `ongoing`도 추정이다.
+- (원칙 ①) BidWatch가 지금 읽는 `extra` 키가 있는지 — 있으면 원래 이름으로 바꿀 때 함께 고친다(계약 밖이지만 실사용은 확인한다).

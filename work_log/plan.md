@@ -130,7 +130,11 @@
   2. `interface.md` §2 · README 지원 현황 · 버전 1.3.0 · handover `docs/handover/v1.3.0.md` · "사용자 실테스트 대기"에 한 줄
   - 범위 밖: 요청서 §4 결함·불일치 10건(bidwatch `docs/source_fields.md` 부록 A) — 별도 발급.
   - 완료 조건: F-010 (v1.3.0) 기준 전부 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수 기록) · BidWatch `backend/tests` 통과 · handover.
-- [ ] Phase 008: 저위험 결함 5건 — bidwatch 필드 사전 부록 A #1·#3·#4·#9·#10 (F-002·F-001·F-006·F-003) — **계약 불변(표준 필드 값·bid_no·시그니처 불변) → patch 1.3.0 → 1.3.1**
+- [x] Phase 008: 저위험 결함 5건 — bidwatch 필드 사전 부록 A #1·#3·#4·#9·#10 (F-002·F-001·F-006·F-003) — **계약 불변(표준 필드 값·bid_no·시그니처 불변) → patch 1.3.0 → 1.3.1**
+  (2026-09-25 — 로그 없음(실패한 접근 없음, 착수 시 확인 3건 모두 "삭제/교체 대상 없음"). `d157609`·`17a044b` · handover `docs/handover/v1.3.1.md` —
+  단위 438 passed·ruff 통과 / 변이 6건 전부 잡힘(`scripts/_tmp/mutate_phase008.py`) / 실측(`phase008_probe.py`): 계약 공사 1일 0 → 61건(건너뜀 61 → 0),
+  제목 태그 용역 cntrctNm 100/100·물품 40/40·공사 cnstwkNm 61/61, K-Startup matchCount 230·totalCount 30,168 요청 4→3회 228건 동일, 잘못된 키 403 → errors·마스킹 /
+  qa-tester 합격 460 passed/0 failed(실호출 22건) + 계약 공사 1일 62건(원문과 일치)·3일 10,572건 / BidWatch `backend/tests` 130 passed(읽기·실행만))
   - 출처: bidwatch `docs/source_fields.md` 부록 A(2026-09-25 필드 사전 조사, 요청서 `docs/requests/bid-collectors_alio_fetch_detail.md` §4). 발급 2026-09-25 사용자.
     부록 A의 나머지 #2·#5·#6·#7·#8은 BidWatch가 받는 표준 필드 값(end_date·budget·region·organization·status)이 바뀌어 **일반 트랙** — 원칙 ② Phase에 합친다(이 Phase 범위 밖).
   - 트랙: 저위험. BidWatch가 받는 값이 바뀌는 것은 #1(쓰지 않는 확장 메서드 `collect_contracts`)뿐 → handover는 참고 수준 한 장.
@@ -186,8 +190,9 @@
 > 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
 > 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
 
+- **v1.3.1 부록 A 저위험 5건(bidwatch 세션 몫)** — `docs/handover/v1.3.1.md`. 코드 할 일 없음, `docs/source_fields.md` 부록 A 해소 표시·`pip install -e` 재실행. 반영 확인은 그 문서 §5.
 - **v1.3.0 알리오 fetch_detail(bidwatch 세션 몫)** — `docs/handover/v1.3.0.md`. `SKIP_DETAIL_TYPES`·병합 조건(0 버림·빈 첨부 "조회함" 표시)·
-  팝업 첨부·원문 링크(onbid 포함)·interface.md 교체. 반영 확인은 그 문서 §5.
+  팝업 첨부·원문 링크(onbid 포함)·interface.md 교체. §5 반영 기록됨(2026-09-25) — 남은 것: 팝업 화면 사용자 실테스트(bidwatch plan.md).
 - **v1.2.5 extra 원문 전부·확장 3메서드 빈 ID·선택 필드 null(bidwatch 세션 몫)** — `docs/handover/v1.2.5.md`. NoticeModal 키 26개 대응·interface.md 교체·
   오픈 전 재수집·httpx 로거 레벨. 반영 확인은 그 문서 §5(2026-09-25 인계).
 - **BidWatch 연동(bidwatch 세션 몫)** — ① 정기·시험 수집의 `GenericScraper(...)` 3곳(`tasks/collect_scraper.py`·`services/scraper_ai.py`·
@@ -211,6 +216,11 @@
     GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다") /
     (qa-tester 2026-09-25) httpx `_client` INFO 로그가 요청 URL의 `serviceKey`·`crtfcKey`를 평문으로 싣는다 — 이 패키지 로거가 아니라 소비자가
     루트 로거를 INFO로 열 때 노출. `create_client`에 마스킹 필터를 붙일지 결정 대기(`scripts/_tmp/qa_phase006_integration.log`에 실제로 평문 키가 남았다 — gitignore 영역)
+  - (qa-tester 2026-09-25, Phase 008) **계약 공사 days=3 건수 차이 미확인** — 원문 날짜별 합 10,593 vs `collect_contracts` 10,572(21건 차).
+    같은 bid_no 중복 제거인지(빈 `dcsnCntrctNo` → `untyCntrctNo` 폴백 충돌 포함) 항목 건너뜀인지 미판별(경고 로그 캡처 전 콘솔 인코딩 오류). days=1은 62=62 일치.
+    확인하려면 공사 3일분 ~106호출 — 한도 여유 있는 날 경고 로그와 bid_no 중복 수를 함께 센다 /
+    **통합 테스트 공백**: 확장 3메서드(`collect_contracts` 등) 실호출 테스트 없음 · `test_integration_phase1.py`의 `test_collect`는 0건이어도 통과 —
+    이번 공사 누락도 고정 응답 픽스처가 가렸다(실제 태그로 교체함)
   - **안 함(2026-09-25 사용자)**: GenericScraper status를 게시일로 판정(어제 공고가 closed) — 바꾸면 소비자 값이 바뀌는 일반 트랙인데,
     BidWatch가 GenericScraper 공고의 상태 배지를 숨겨 쓰지 않는다. BidWatch가 이 status를 쓰기 시작하면 다시 연다.
   - 일반 트랙: interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·

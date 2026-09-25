@@ -1,11 +1,11 @@
 # bid-collectors — 공공 입찰공고·지원사업 수집 파이썬 패키지
 
-Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.3.0). 소비자는 BidWatch.
+Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.3.1). 소비자는 BidWatch.
 (2026-09-23 greenfield 템플릿 체계를 기존 저장소에 이식 — Phase 001~003은 이식 전에 완료됐다.)
 
 ## 현재 단계
 - 전체 Phase 체크리스트/아키텍처의 **단일 원본 = `work_log/plan.md`** (여기에 중복 기재 금지)
-- 현재: **Phase 008 발급(미착수, 저위험 결함 5건 → v1.3.1) — 직전 Phase 007 완료(2026-09-25, v1.3.0, handover `docs/handover/v1.3.0.md`)** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
+- 현재: **Phase 008 완료(2026-09-25, v1.3.1, handover `docs/handover/v1.3.1.md`) — 다음 Phase 미발급** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
 
 ## 새 세션 시작 시
 - 훅(`session_context.py`)이 plan.md의 현재 Phase·읽을 Phase 로그·실테스트 대기를 주입한다 — 지시대로 읽는다.

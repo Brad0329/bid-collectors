@@ -21,7 +21,7 @@ pip install -e ".[dev]"
 `.env.example`을 `.env`로 복사 후 키 입력:
 
 ```env
-DATA_GO_KR_KEY=       # 공공데이터포털 통합 인증키 (나라장터, 보조금24, K-Startup, 중소벤처기업부)
+DATA_GO_KR_KEY=       # 공공데이터포털 통합 인증키 (나라장터, 보조금24, K-Startup, 중소벤처기업부, LH, 가스공사, 국방전자조달, 수자원공사)
 BIZINFO_API_KEY=      # 기업마당 전용 API 키
 ```
 
@@ -34,7 +34,14 @@ BIZINFO_API_KEY=      # 기업마당 전용 API 키
 | 보조금24 | `Subsidy24Collector` | 공공데이터포털 | `DATA_GO_KR_KEY` |
 | K-Startup | `KstartupCollector` | 공공데이터포털 | `DATA_GO_KR_KEY` |
 | 중소벤처기업부 | `SmesCollector` | 공공데이터포털 | `DATA_GO_KR_KEY` |
+| 알리오 | `AlioCollector` | alio.go.kr 공개 JSON | 불필요 |
+| LH | `LhCollector` | 공공데이터포털 15159012 | `DATA_GO_KR_KEY` (활용신청) |
+| 한국가스공사 | `KogasCollector` | 공공데이터포털 15157366 | `DATA_GO_KR_KEY` (활용신청) |
+| 국방전자조달 | `D2bCollector` | 공공데이터포털 15158416 | `DATA_GO_KR_KEY` (활용신청, 오퍼레이션당 100회/일) |
+| 한국수자원공사 | `KwaterCollector` | 공공데이터포털 15101635 | `DATA_GO_KR_KEY` (활용신청) |
 | 범용 스크래퍼 | `GenericScraper` | config 기반 HTML | 불필요 |
+
+기관 수집기 4종(v1.4.0)의 날짜 기준·함정·알리오 연결 키는 `docs/institution_sources.md`.
 
 ## 사용법
 

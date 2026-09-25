@@ -202,6 +202,9 @@
 
 ## 사용자 실테스트 대기
 
+- **v1.4.0 자체조달 기관 수집기 4종(bidwatch 세션 몫)** — `docs/handover/v1.4.0.md`. 출처 등록(스키마 게이트)·bidwatch 키 활용신청·금액 이름별 표시(`-`)·
+  interface.md 교체·`pip install -e`. 반영 확인은 그 문서 §5.
+
 > 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
 > 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
 
@@ -230,6 +233,9 @@
     GenericScraper health_check·페이지 오류 메시지 키 마스킹 누락 / 알리오 `old_pages` 전부 건너뛴 페이지에서 리셋(주석은 "세지 않는다") /
     (qa-tester 2026-09-25) httpx `_client` INFO 로그가 요청 URL의 `serviceKey`·`crtfcKey`를 평문으로 싣는다 — 이 패키지 로거가 아니라 소비자가
     루트 로거를 INFO로 열 때 노출. `create_client`에 마스킹 필터를 붙일지 결정 대기(`scripts/_tmp/qa_phase006_integration.log`에 실제로 평문 키가 남았다 — gitignore 영역)
+  - (Phase 009, 2026-09-26) **기관 수집기 평일 등록 지연 미측정** — 조사·실측일이 추석 연휴(9/24~26)라 "어제~오늘 창 0건"이 지연인지 공고 없음인지
+    못 가렸다. 9/29 이후 평일에 LH·가스·d2b 경쟁을 어제~오늘 창으로 몇 시간 간격 재측정 → handover v1.4.0 §2-3 권장 days 조정.
+    수자원 빈 본문 경계도 미확인(53KB 성공·발주계획 411건 실패) — 한 달치가 커지면 50건 페이지로 내려가고 겹침을 errors로 알린다.
   - (qa-tester 2026-09-25, Phase 008) **계약 공사 days=3 건수 차이 미확인** — 원문 날짜별 합 10,593 vs `collect_contracts` 10,572(21건 차).
     같은 bid_no 중복 제거인지(빈 `dcsnCntrctNo` → `untyCntrctNo` 폴백 충돌 포함) 항목 건너뜀인지 미판별(경고 로그 캡처 전 콘솔 인코딩 오류). days=1은 62=62 일치.
     확인하려면 공사 3일분 ~106호출 — 한도 여유 있는 날 경고 로그와 bid_no 중복 수를 함께 센다 /

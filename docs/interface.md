@@ -58,7 +58,7 @@ class Notice(BaseModel):
 | 규칙 | 설명 |
 |------|------|
 | `bid_no` 형식 | 수집기마다 자유. 단, source 내에서 UNIQUE 보장 |
-| `bid_no` 예시 | 나라장터: `"용역-20260405001-00"`, 기업마당: `"BIZINFO-12345"`, 알리오: `"ALIO-3580351"`, 스크래퍼: `"SCR-kocca-a1b2c3d4e5"` |
+| `bid_no` 예시 | 나라장터: `"용역-20260405001-00"`, 기업마당: `"BIZINFO-12345"`, 알리오: `"ALIO-3580351"`, LH: `"LH-2603329"`, 가스공사: `"KOGAS-2026092314"`, 국방전자조달: `"D2B-국내경쟁-2026ERA00055606N-3"`, 수자원공사: `"KWATER-B5202603396"`, 스크래퍼: `"SCR-kocca-a1b2c3d4e5"` |
 | `status` 값 | `"ongoing"` (진행중), `"closed"` (마감), `"cancelled"` (취소). 기본값 `"ongoing"` |
 | `budget` | 원 단위 정수. 미공개/미확인이면 `None` |
 | `content` | HTML 태그 제거된 순수 텍스트. 공백/줄바꿈 정리 완료 상태 |
@@ -292,15 +292,22 @@ result = await scraper.collect(days=30)
 | `KstartupCollector` | `DATA_GO_KR_KEY` | K-Startup |
 | `SmesCollector` | `DATA_GO_KR_KEY` | 중소벤처기업부 |
 | `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0), `fetch_detail` 첨부·원문 링크 (v1.3.0) |
+| `LhCollector` | `DATA_GO_KR_KEY` | LH 입찰공고(15159012) — source `"LH"`, bid_no `LH-{bidNum}`(정정·취소는 같은 bid_no로 갱신) (v1.4.0) |
+| `KogasCollector` | `DATA_GO_KR_KEY` | 한국가스공사 입찰정보(15157366) — source `"가스공사"`, bid_no `KOGAS-{NOTICE_CODE}` (v1.4.0) |
+| `D2bCollector` | `DATA_GO_KR_KEY` | 국방전자조달 목록 5종(15158416) — source `"국방전자조달"`, bid_no `D2B-{국내경쟁·국외경쟁·시설경쟁·국내수의·시설수의}-{키}-{차수}`. 수의 2종은 진행 중 전량(공고일 필터 없음, start_date None) (v1.4.0) |
+| `KwaterCollector` | `DATA_GO_KR_KEY` | 한국수자원공사 입찰공고 4종(15101635) — source `"수자원공사"`, bid_no `KWATER-{tndrPbanno}` (v1.4.0) |
 | `GenericScraper` | (없음) | config만 필요 |
 
-(공기업 API 5종·중소벤처24는 미구현 — bid-collectors `work_log/plan.md` '이후 단계')
+- 기관 수집기 4종(v1.4.0) 공통: `budget`은 `None` — 추정가격·기초금액·설계가 등 금액은 `extra`에 원래 이름으로 있다(어느 것을 budget으로 볼지는 원칙 ② 결정 전).
+  `organization`은 LH·가스·수자원이 기관 공식명(알리오 `pname`과 같은 이름), d2b는 발주기관 `ornt`. `category`는 출처의 업무 구분(시설공사·용역·물품 등).
+  각 API는 data.go.kr 활용신청이 필요하고 한도는 오퍼레이션별이다(d2b만 100회/일).
+(한전·발전사(전력데이터개방포털 키 필요)·코레일·중소벤처24는 미구현 — bid-collectors `docs/institution_sources.md`)
 
 ---
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.3.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.4.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

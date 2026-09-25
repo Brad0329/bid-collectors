@@ -170,11 +170,11 @@
 
 ### F-008: 상세 조회 (`fetch_detail(bid_no)`)
 - **설명**: 목록 수집에 없는 정보를 공고 1건 단위로 보충한다. 결과 캐싱은 소비자 몫.
-  K-Startup만 구현(`cond[pbanc_sn::EQ]` 단건 조회 → content 전문 + 대상·신청방법 등 dict).
+  K-Startup(`cond[pbanc_sn::EQ]` 단건 조회 → content 전문 + 대상·신청방법 등 dict, 실패는 None)·알리오(v1.3.0 — 수용 기준은 F-010, 실패는 예외) 구현.
   나라장터는 API가 단건 조회·사업개요를 지원하지 않아 None — 대신 수집 시점에 extra를 채운다(`work_log/Phase_003_detail.md`).
 - **수용 기준**:
   - [ ] K-Startup: 존재하는 bid_no면 content 전문이 든 dict, 없는 번호·오류면 None → 테스트 없음
-  - [ ] 나라장터·기업마당·보조금24·중소벤처기업부·GenericScraper는 None → 테스트 없음
+  - [ ] 나라장터·기업마당·보조금24·중소벤처기업부·GenericScraper는 None → 테스트 없음 (알리오는 v1.3.0부터 구현 — F-010)
 - **상태**: 완료 (2026-04-11, 나라장터 스크래핑 제거 2026-04-13)
 
 ### F-009: 공통 유틸 — 날짜 파싱·HTML 정리·상태 판정·HTTP 클라이언트
@@ -191,7 +191,11 @@
   2번 연달아 나오면 멈춘다(v1.2.3 — 종전 "첫 오래된 항목에서 멈춤"은 9/22 공고 472건을 errors 없이 놓쳤다). 평일 하루 약
   450~500건이라 기본 max_pages 150(≈3일치). **API 키 불필요.**
   bid_no = `ALIO-{seq}`, organization = 공고 기관(`pname`), 상세 = `bidDtl.do?seq=`. 자체조달 공기업 공고를 받기 위해
-  (bidwatch `docs/procurement_sources_research.md` 3-1). fetch_detail은 None(목록에 본문 없음 — 필요해지면 추가).
+  (bidwatch `docs/procurement_sources_research.md` 3-1).
+  **fetch_detail(v1.3.0, Phase 007)**: `GET alio.go.kr/occasional/findBidDtl.json?seq=`(인증 없음) → `attachments`(`fileList`) + `content`(HTML 제거) +
+  `data.bidDtl`의 비어 있지 않은 필드 전부·원래 이름(원칙 ①, `bFiles` 포함 — 2026-09-25 사용자). 실패는 예외(없는 seq도 HTTP 200 +
+  `status:"error"` "시스템 에러입니다"라 장애와 구분 불가 — 2026-09-25 실측·사용자 확정). 수집 경로에서는 부르지 않는다(1건당 호출 +1). 출처: bidwatch 요청서
+  `bidwatch/docs/requests/bid-collectors_alio_fetch_detail.md`.
 - **수용 기준**:
   - [x] 항목 → Notice(제목 공백 정리·기관·공고일·마감일·상태·상세 URL) → `test_item_maps_to_notice`
   - [x] API 키 없이 생성된다 → `test_no_api_key_needed`
@@ -202,12 +206,19 @@
   - ~~기준일보다 오래된 항목에서 멈추고 그 뒤와 다음 페이지를 받지 않는다~~ — 폐기(v1.2.3, 등록 순 목록이라 누락을 낳음)
   - [x] 1페이지 실패는 0건 + errors, 2페이지 실패(status≠success 포함)는 1페이지 보존 + errors → `test_first_page_failure_*`·`test_second_page_failure_keeps_first_page`·`test_non_success_status_raises`
   - [x] max_pages 상한 도달 시 절단 사실과 전체 건수를 errors에 → `test_max_pages_truncation_reported_with_total`
+  - [x] (v1.3.0) fetch_detail: 첨부 3건 응답 → `attachments` 3건(`name`=fileNm·`url`=fileNo, 순서 유지), 반환 키 집합 ==
+    bidDtl의 비어 있지 않은 키 ∪ {`attachments`,`content`}(0 포함·이름 그대로), `content`는 HTML 제거·빈 값이면 `""` → `TestFetchDetail::test_maps_detail`·`test_content_html_stripped`
+  - [x] (v1.3.0) fetch_detail: `fileList`가 없거나 null이면 `attachments == []`(None 아님) → `test_no_files_gives_empty_list`
+  - [x] (v1.3.0) fetch_detail: `status != success`·HTTP 오류·`bidDtl` 없음·`fileList`가 list 아님 → 예외(메시지에 status·message), `ALIO-{seq}` 형식이 아니면
+    요청 없이 `ValueError` → `test_error_status_raises`·`test_http_error_raises`·`test_malformed_raises`·`test_bad_bid_no_raises_without_request`
+  - [x] (v1.3.0) `collect()`는 상세 API를 부르지 않는다 → `test_collect_does_not_call_detail_api`
+  - [x] (v1.3.0) 실호출: 최근 공고 seq로 상세 조회 → 반환 키 집합 == 비어 있지 않은 키 ∪ 2개, attachments 건수 == fileList 건수 → `test_real_fetch_detail`(integration)
   - [x] seq 없는 항목은 건너뛰고 건수를 errors에 → `test_item_without_seq_is_skipped_and_reported`
   - [x] 필수 필드(seq·rtitle·pname·bdate)가 없거나 비었거나 날짜로 안 읽히면 건너뛰고 **사유(필드 이름)와 건수**를 errors에 —
     공식 API가 없어 형식 변경을 감지하는 유일한 장치(2026-09-24, v1.2.2). seq 0은 유효, 마감일은 선택(실측 474건 중 10건 빈 값)
     → `test_missing_required_field_is_skipped_with_reason`(6) · `test_seq_zero_is_a_valid_id` · `test_missing_deadline_is_kept`
   - [x] 실호출: 최근 3일 1건 이상, 필드 채워짐 → `test_real_api_returns_recent_notices`(integration, 2026-09-24 통과)
-- **상태**: 완료 (2026-09-24, v1.2.0)
+- **상태**: 완료 (2026-09-24, v1.2.0 / fetch_detail 2026-09-25, v1.3.0 Phase 007 — 실측 30건 전부 키 집합·첨부 건수 일치)
 
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).

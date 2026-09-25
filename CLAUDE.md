@@ -1,11 +1,11 @@
 # bid-collectors — 공공 입찰공고·지원사업 수집 파이썬 패키지
 
-Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.2.5). 소비자는 BidWatch.
+Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 수집 라이브러리(v1.3.0). 소비자는 BidWatch.
 (2026-09-23 greenfield 템플릿 체계를 기존 저장소에 이식 — Phase 001~003은 이식 전에 완료됐다.)
 
 ## 현재 단계
 - 전체 Phase 체크리스트/아키텍처의 **단일 원본 = `work_log/plan.md`** (여기에 중복 기재 금지)
-- 현재: **Phase 006 완료(2026-09-25, v1.2.5, handover `docs/handover/v1.2.5.md`) — 다음 Phase 미발급** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
+- 현재: **Phase 007 완료(2026-09-25, v1.3.0, handover `docs/handover/v1.3.0.md`) — 다음 Phase 미발급** (Phase 완료 시 이 줄과 plan.md 체크박스를 함께 갱신)
 
 ## 새 세션 시작 시
 - 훅(`session_context.py`)이 plan.md의 현재 Phase·읽을 Phase 로그·실테스트 대기를 주입한다 — 지시대로 읽는다.
@@ -96,7 +96,7 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
   | F-007 | GenericScraper — config 기반 HTML 게시판 수집 | 완료 (실패·절단 보고·요청 훅 Phase 004) |
   | F-008 | 상세 조회 fetch_detail | 완료 |
   | F-009 | 공통 유틸(날짜·HTML·상태·HTTP) | 완료 |
-  | F-010 | 알리오 공공기관 입찰공고 수집 | 완료 (2026-09-24, v1.2.0) |
+  | F-010 | 알리오 공공기관 입찰공고 수집 | 완료 (2026-09-24, v1.2.0 / fetch_detail v1.3.0) |
   | **다음 번호** | **F-011** | |
 
 ## 검증 원칙

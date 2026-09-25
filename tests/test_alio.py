@@ -9,7 +9,7 @@ import pytest
 import respx
 
 from bid_collectors import AlioCollector
-from bid_collectors.alio import API_URL, _item_to_notice, _parse_response
+from bid_collectors.alio import API_URL, DETAIL_API_URL, _item_to_notice, _parse_response
 
 
 def _d(days_ago: int) -> str:
@@ -185,6 +185,139 @@ class TestRequiredFields:
         assert [n.bid_no for n in result.notices] == ["ALIO-60"]
         assert result.notices[0].end_date is None
         assert result.is_partial is False
+
+
+def _file(n: int) -> dict:
+    return {"fileNm": f"공고문{n}.hwp", "fileNo": f"https://www.g2b.go.kr/down?fileSeq={n}"}
+
+
+def _dtl(**over) -> dict:
+    """findBidDtl.json의 data.bidDtl — seq 3580350 실응답(2026-09-25)에서 줄인 것. 빈 값·0이 섞여 있다."""
+    d = {"rnum": 1, "disclosureNo": "2026092303245364", "boardNo": 3580350, "gbn": "2", "critQuar": None,
+         "apbaId": "C0213", "pname": "한국생산기술연구원", "seq": "3580350", "rtitle": "개기공분포측정기",
+         "refrUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01743684&bidPbancOrd=000",
+         "content": "", "author": None, "ingStatus": "1", "totContAmt": 0, "bidType": "1",
+         "bFiles": "https://www.g2b.go.kr/down?fileSeq=1|공고문1.hwp", "logo": " "}
+    d.update(over)
+    return d
+
+
+def _dtl_body(dtl: dict | None = None, files=None, status: str = "success") -> dict:
+    return {"status": status, "message": None, "data": {"bidDtl": dtl if dtl is not None else _dtl(), "fileList": files}}
+
+
+class TestFetchDetail:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_maps_detail(self):
+        route = respx.get(DETAIL_API_URL).mock(
+            return_value=httpx.Response(200, json=_dtl_body(files=[_file(1), _file(2), _file(3)])))
+        d = await AlioCollector().fetch_detail("ALIO-3580350")
+        assert route.calls[0].request.url.params["seq"] == "3580350"
+        assert d["attachments"] == [{"name": f"공고문{n}.hwp", "url": f"https://www.g2b.go.kr/down?fileSeq={n}"}
+                                    for n in (1, 2, 3)]
+        nonempty = {k for k, v in _dtl().items() if v is not None and str(v).strip() != ""}
+        assert set(d) == nonempty | {"attachments", "content"}  # 원래 이름 그대로, 골라 빼지 않음
+        assert d["totContAmt"] == 0  # 0은 값이다
+        assert d["refrUrl"].startswith("https://www.g2b.go.kr/")
+        assert d["content"] == ""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_content_html_stripped(self):
+        respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(
+            200, json=_dtl_body(_dtl(content="<p>사업 <b>개요</b></p>"), files=[])))
+        d = await AlioCollector().fetch_detail("ALIO-1")
+        assert d["content"] == "사업 개요"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    @pytest.mark.parametrize("files", [None, []])
+    async def test_no_files_gives_empty_list(self, files):
+        respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=_dtl_body(files=files)))
+        d = await AlioCollector().fetch_detail("ALIO-1")
+        assert d["attachments"] == []
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_error_status_raises(self):
+        # 실측(2026-09-25): 없는 seq·abc·빈 값·0 전부 HTTP 200 + 이 모양
+        respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(
+            200, json={"status": "error", "message": "시스템 에러입니다. 관리자에게 문의하세요.", "data": None}))
+        with pytest.raises(ValueError, match="status='error' message='시스템 에러입니다. 관리자에게 문의하세요.'"):
+            await AlioCollector().fetch_detail("ALIO-999999999")
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_http_error_raises(self):
+        respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(500))
+        with pytest.raises(httpx.HTTPStatusError):
+            await AlioCollector().fetch_detail("ALIO-1")
+
+    @pytest.mark.asyncio
+    @respx.mock
+    @pytest.mark.parametrize("body, match", [
+        ({"status": "success", "data": {"fileList": []}}, "bidDtl 없음"),
+        ({"status": "success", "data": None}, "bidDtl 없음"),
+        (_dtl_body(files="a.hwp"), "fileList가 list가 아님"),
+    ])
+    async def test_malformed_raises(self, body, match):
+        respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=body))
+        with pytest.raises(ValueError, match=match):
+            await AlioCollector().fetch_detail("ALIO-1")
+
+    @pytest.mark.asyncio
+    @respx.mock
+    @pytest.mark.parametrize("bid_no", ["3580350", "KSTARTUP-1", "ALIO-", "ALIO- "])
+    async def test_bad_bid_no_raises_without_request(self, bid_no):
+        route = respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=_dtl_body(files=[])))
+        with pytest.raises(ValueError, match="형식이 아님"):
+            await AlioCollector().fetch_detail(bid_no)
+        assert route.call_count == 0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_collect_does_not_call_detail_api(self):
+        detail = respx.get(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=_dtl_body(files=[])))
+        respx.get(API_URL).mock(side_effect=[
+            httpx.Response(200, json=_body([_item(10), _item(9)])),
+            httpx.Response(200, json=_body([])),
+        ])
+        result = await AlioCollector().collect(days=1)
+        assert len(result.notices) == 2
+        assert detail.call_count == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_fetch_detail():
+    """(v1.3.0) 실호출 — 목록 1페이지(10건)의 seq마다 상세 조회: 키 집합 == 비어 있지 않은 bidDtl 키 ∪ 2개, 첨부 건수 == fileList 건수.
+    독립 계산을 위해 같은 seq의 원응답을 한 번 더 받는다."""
+    from bid_collectors.utils.http import create_client
+
+    collector = AlioCollector()
+    async with create_client(timeout=20.0) as client:
+        resp = await client.get(API_URL, params={"type": "title", "word": "", "pageNo": "1", "area": ""})
+        items, _ = _parse_response(resp.json())
+        assert items, "알리오 1페이지가 비어 있음"
+        n_files = n_refr = 0
+        for item in items:
+            d = await collector.fetch_detail(f"ALIO-{item['seq']}")
+            raw = (await client.get(DETAIL_API_URL, params={"seq": item["seq"]})).json()["data"]
+            expected = {k for k, v in raw["bidDtl"].items() if v is not None and str(v).strip() != ""}
+            assert set(d) == expected | {"attachments", "content"}, f"seq={item['seq']}"
+            assert len(d["attachments"]) == len(raw.get("fileList") or []), f"seq={item['seq']}"
+            n_files += len(d["attachments"])
+            n_refr += "refrUrl" in d
+    print(f"\n[fetch_detail 실측] 알리오 1페이지 {len(items)}건: 첨부 합계 {n_files}개, refrUrl {n_refr}건")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_fetch_detail_unknown_seq_raises():
+    """실호출 고장 시나리오 — 없는 seq는 예외(None·빈 dict로 조용히 돌아오지 않는다)."""
+    with pytest.raises(ValueError, match="status='error'"):
+        await AlioCollector().fetch_detail("ALIO-999999999")
 
 
 @pytest.mark.integration

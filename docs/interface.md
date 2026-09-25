@@ -118,8 +118,15 @@ class BaseCollector(ABC):
 
     async def fetch_detail(self, bid_no: str) -> dict | None:
         """
-        공고 1건 상세 조회. K-Startup만 구현(content 전문 + 대상·신청방법 등), 나머지는 None.
-        결과 캐싱은 소비자 몫.
+        공고 1건 상세 조회. 결과 캐싱은 소비자 몫. 수집(collect) 중에는 부르지 않는다 — 필요할 때 소비자가 1건씩 부른다.
+        - K-Startup: content 전문 + 대상·신청방법 등 dict. 실패·없는 번호는 None(경고 로그).
+        - 알리오(v1.3.0): `findBidDtl.json?seq=` → 아래 dict. **실패는 예외** — HTTP 오류(`httpx.HTTPStatusError` 등)·
+          `status != "success"`·응답 형식 이상·`ALIO-{seq}` 형식이 아닌 bid_no는 `ValueError`.
+          없는 seq도 알리오가 HTTP 200 + `status:"error"`("시스템 에러입니다. 관리자에게 문의하세요.")로 주므로 "없음"과 "장애"를 구분하지 않는다.
+            {"attachments": [{"name": fileNm, "url": fileNo}, ...],  # 없으면 [] (None 아님)
+             "content": str,                                          # bidDtl.content HTML 제거, 없으면 "" (실측상 늘 빈 값)
+             ...data.bidDtl의 비어 있지 않은 필드 전부, 원래 이름}     # refrUrl·bidType·apbaId·ingStatus·totContAmt(0 포함)·bFiles …
+        - 나머지(나라장터·기업마당·보조금24·중소벤처기업부·GenericScraper)는 None.
         """
         ...
 
@@ -284,7 +291,7 @@ result = await scraper.collect(days=30)
 | `Subsidy24Collector` | `DATA_GO_KR_KEY` | 보조금24 |
 | `KstartupCollector` | `DATA_GO_KR_KEY` | K-Startup |
 | `SmesCollector` | `DATA_GO_KR_KEY` | 중소벤처기업부 |
-| `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0) |
+| `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0), `fetch_detail` 첨부·원문 링크 (v1.3.0) |
 | `GenericScraper` | (없음) | config만 필요 |
 
 (공기업 API 5종·중소벤처24는 미구현 — bid-collectors `work_log/plan.md` '이후 단계')
@@ -293,7 +300,7 @@ result = await scraper.collect(days=30)
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.2.5` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.3.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

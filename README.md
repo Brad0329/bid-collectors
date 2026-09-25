@@ -82,7 +82,8 @@ if detail:
 | 수집기 | fetch_detail | 비고 |
 |--------|-------------|------|
 | NaraCollector | X (None) | API 단건 조회 미지원. 수집 시 extra에 상세 필드 포함 |
-| KstartupCollector | O | API 단건 필터 조회 |
+| KstartupCollector | O | API 단건 필터 조회. 실패는 None |
+| AlioCollector | O | 첨부(`attachments`)·원문 링크(`refrUrl`) 등 상세 필드 원문 전부 (v1.3.0). 실패는 예외 |
 | 그 외 | X | None 반환 (미지원) |
 
 > **나라장터 참고**: data.go.kr API가 `bidNtceNo` 단건 조회를 지원하지 않으며,

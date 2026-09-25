@@ -10,7 +10,7 @@
 
 ## 시스템 개요
 - 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부)와 임의 HTML
-  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.2.5).
+  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.3.0).
   소비자는 BidWatch(`C:\Users\user\Documents\bidwatch`, editable 설치). 역할 경계: 외부 사이트에서 공고를 가져오는 것은
   전부 이 패키지 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은 BidWatch. 요구사항 상세는 `docs/REQUIREMENTS.md`.
 
@@ -119,6 +119,17 @@
   - 완료 조건: REQUIREMENTS 원칙 ① `[x]` + F-002 A 기준 + 공통 계약 B 기준 각각 테스트 대응(변이 확인) · 전체 테스트 0 failed · 실측(위 3의 통합, 표본 수 기록) ·
     BidWatch `backend/tests` 통과(읽기·실행만) · handover 문서 `docs/handover/v1.2.5.md`(4의 대응표·interface.md diff·검증법·되돌리기) +
     "사용자 실테스트 대기"에 링크 한 줄 · 버전 1.2.5.
+- [x] Phase 007: v1.3.0 — 알리오 `fetch_detail` (F-010·F-008) — **기능 추가(알리오 반환 None → dict, 시그니처·bid_no 불변) → minor 1.2.5 → 1.3.0**
+  (2026-09-25 — 로그 없음(실패한 접근 없음). handover `docs/handover/v1.3.0.md` — 단위 435 passed·ruff 통과 / 변이 9건 전부 잡힘(`scripts/_tmp/mutate_phase007.py`) /
+  qa-tester 합격 457 passed/0 failed(실호출 22건) + 실측 목록 3페이지 30건: 키 집합·첨부 건수 30/30 일치, 예외 0, 첨부 83개, refrUrl 30(g2b 20·onbid 10), content 비어 있지 않음 0 /
+  고장 5건(없는 seq 3·형식 2) 전부 예외 / BidWatch `backend/tests` 126 passed(읽기·실행만))
+  - 출처: bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_alio_fetch_detail.md`(2026-09-25, 팝업의 첨부·원문 링크·나라장터 연결).
+    CONTRACT.md 변경안 확정 2026-09-25 사용자: 실패 = 예외 · `bFiles` 포함(원문 전부) · 1.3.0.
+  - 트랙: 일반(interface.md §2 변경 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기 경로(태그·커밋).
+  1. `AlioCollector.fetch_detail` + 단위 테스트(F-010 v1.3.0 기준 5개, 변이 확인) + 실호출 1건
+  2. `interface.md` §2 · README 지원 현황 · 버전 1.3.0 · handover `docs/handover/v1.3.0.md` · "사용자 실테스트 대기"에 한 줄
+  - 범위 밖: 요청서 §4 결함·불일치 10건(bidwatch `docs/source_fields.md` 부록 A) — 별도 발급.
+  - 완료 조건: F-010 (v1.3.0) 기준 전부 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수 기록) · BidWatch `backend/tests` 통과 · handover.
 
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
@@ -129,7 +140,7 @@
   LH 입찰공고 15021183(+ 계약 15021184·발주계획 15042795·사전규격 15042796·개찰 15057180) · 한전 전자입찰계약 15148223 ·
   도로공사 전자조달 계약공개 15128076 · 수자원공사 전자조달 입찰공고 15101635 · 방위사업청 입찰공고 15002040(+ 결과 15002018·
   조달계획 15002017·계약 15002019·코드 15002020). 나라장터에 안 올라오는 자체 입찰건 확보가 가치. 구현은 Phase 002 패턴 복제.
-- **v1.3 호출 한도 대응** — `CollectResult`에 data.go.kr 호출 수 반환(일 1,000회 한도를 BidWatch가 합산하기 위함, 필드 추가 = minor) ·
+- **호출 한도 대응(종전 가칭 "v1.3" — 1.3.0은 알리오 fetch_detail이 썼다)** — `CollectResult`에 data.go.kr 호출 수 반환(일 1,000회 한도를 BidWatch가 합산하기 위함, 필드 추가 = minor) ·
   429 지수 백오프(현재 나라장터만 30초 고정 3회).
 - **헤드리스 브라우저는 하지 않는다**(2026-09-23) — JS 렌더링 사이트는 JSON 모드·소비자 AI의 내부 JSON 감지가 우선.
 - 구 plan.md "Phase 4 품질+운영"의 나머지: 로깅 표준화 · ~~수집기별 필드 매핑표 문서~~(**안 함** 2026-09-25 — 원문 전부 전달 원칙으로
@@ -159,6 +170,8 @@
 > 2026-09-25부터 bidwatch에 넘길 상세는 `docs/handover/v<버전>.md`에 쓰고 여기는 한 줄 링크만 둔다(아래 두 항목은 그 전 형식).
 > 이 저장소 세션은 bidwatch 폴더를 수정하지 않는다 — 반영은 bidwatch 세션 몫.
 
+- **v1.3.0 알리오 fetch_detail(bidwatch 세션 몫)** — `docs/handover/v1.3.0.md`. `SKIP_DETAIL_TYPES`·병합 조건(0 버림·빈 첨부 "조회함" 표시)·
+  팝업 첨부·원문 링크(onbid 포함)·interface.md 교체. 반영 확인은 그 문서 §5.
 - **v1.2.5 extra 원문 전부·확장 3메서드 빈 ID·선택 필드 null(bidwatch 세션 몫)** — `docs/handover/v1.2.5.md`. NoticeModal 키 26개 대응·interface.md 교체·
   오픈 전 재수집·httpx 로거 레벨. 반영 확인은 그 문서 §5(2026-09-25 인계).
 - **BidWatch 연동(bidwatch 세션 몫)** — ① 정기·시험 수집의 `GenericScraper(...)` 3곳(`tasks/collect_scraper.py`·`services/scraper_ai.py`·

@@ -80,6 +80,11 @@ async def fetch_pages(
             errors.append(msg)
             break
         if not page_items:
+            if len(items) < total:
+                # totalCount가 남았는데 빈 페이지 — 범위 밖 페이지도 00 + 빈 items로 오는 API라(수자원) 조용히 멈추면 절단이다
+                msg = f"{label} 페이지 {page}가 비었음 — 전체 {total}건 중 {len(items)}건만 받음"
+                logger.warning(msg)
+                errors.append(msg)
             break
         pages += 1
         items.extend(page_items)

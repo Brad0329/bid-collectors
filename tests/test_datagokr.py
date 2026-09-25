@@ -86,6 +86,22 @@ class TestFetchPages:
         assert "SECRETKEY" not in errors[0]
 
     @respx.mock
+    async def test_empty_middle_page_with_total_left_is_reported(self):
+        """totalCount가 남았는데 빈 페이지가 오면 조용히 멈추지 않고 받은 건수와 전체 건수를 알린다(spec-checker 2026-09-26)."""
+        respx.get(URL).mock(side_effect=[
+            httpx.Response(200, content=_xml(2, 5)),
+            httpx.Response(200, content=_xml(0, 5)),
+        ])
+        items, pages, errors = await _run()
+        assert (len(items), pages) == (2, 1)
+        assert errors == ["[T] 페이지 2가 비었음 — 전체 5건 중 2건만 받음"]
+
+    @respx.mock
+    async def test_empty_first_page_with_zero_total_is_not_error(self):
+        respx.get(URL).mock(return_value=httpx.Response(200, content=_xml(0, 0)))
+        assert await _run() == ([], 0, [])
+
+    @respx.mock
     async def test_empty_body_page_is_reported(self):
         respx.get(URL).mock(return_value=httpx.Response(200, content=b""))
         items, pages, errors = await _run()

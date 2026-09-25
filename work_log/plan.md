@@ -152,7 +152,11 @@
   5. **#10 문서 오기** — `docs/bid_collectors.md:26·107`의 `smes24.py`(중소벤처24 — Phase 003에서 **안 함**, `smes.py`가 같은 데이터)와 `docs/dev_reference.md:24` `mss_biz.py` → 현재 구조(`smes.py`)로. 원본 레퍼런스 성격이면 주석으로 대응만 표시.
   - 완료 조건: 1·4 테스트 대응(변이 확인)·#1·#9 실측(표본 수 기록) · 전체 테스트 0 failed · 버전 1.3.1(`pyproject.toml`·`__init__.py`) · handover `docs/handover/v1.3.1.md`(계약 공사 수집 재개 + K-Startup 요청 수 변화) · REQUIREMENTS F-002·F-003 기준 추가.
 
-- [ ] Phase 009: v1.4.0 — 자체조달 기관 수집기 4종 LH → 가스공사 → d2b → 수자원 (F-011~F-014) — **export·bid_no 추가 → minor 1.3.1 → 1.4.0**
+- [x] Phase 009: v1.4.0 — 자체조달 기관 수집기 4종 LH → 가스공사 → d2b → 수자원 (F-011~F-014) — **export·bid_no 추가 → minor 1.3.1 → 1.4.0**
+  (2026-09-26 — 로그 `Phase_009.md`(d2b 차수·수자원 페이지 겹침·수의 시작일). `10ce7a4`·`23cdea0`·`1009bc0`·`9038c3c`·`873ced9` · handover `docs/handover/v1.4.0.md` —
+  단위 518 passed·ruff 통과 / 변이 35건 전부 잡힘(`scripts/_tmp/mutate_phase009.py`) / qa-tester 합격 542 passed(실호출 포함) + 실측 4종 × days 7·14·30:
+  합쳐진 행 0·bid_no 고유·잘못된 키 → errors·마스킹 / spec-checker 지적 3건 반영(빈 중간 페이지 보고·CONTRACT 수자원 category 문구·기준 테스트 이름) /
+  BidWatch `backend/tests` 132 passed(읽기·실행만))
   - 출처: bidwatch 요청서 `bid-collectors_institution_collectors.md` ② 구현, 조사 `docs/institution_sources.md`, 계약 CONTRACT.md 2026-09-26 행(사용자 확인 2026-09-26).
   - 트랙: 저위험(새 수집기) — 단 interface.md 목록 갱신·새 bid_no가 있어 계약 게이트를 탔다. 검증: 기관별 단위(사다리) + 실호출 통합 + BidWatch `backend/tests`(읽기·실행만).
   1. `utils/datagokr.py` — data.go.kr XML 파싱(resultCode·빈 본문·EUC-KR) 공유 헬퍼

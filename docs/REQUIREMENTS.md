@@ -234,13 +234,18 @@
   계약 `docs/CONTRACT.md` 2026-09-26 행(사용자 확인 — bid_no 형식·d2b 수의 2종 포함·budget None + 금액은 extra 원문).
 - data.go.kr XML 응답 파싱은 `utils/datagokr.py` 한 곳(4개 수집기 공유) — `resultCode` ≠ 00이면 예외(수집기가 "0건"으로 지정한 코드만 0건),
   **HTTP 200 + 빈 본문은 실패**(수자원 실측: 약 51KB 초과 시), EUC-KR 선언은 바이트 그대로 파싱.
-- 공통 수용 기준(4개 모두):
-  - [ ] 항목 → Notice: 제목·기관·공고일·마감일·category(출처의 업무 구분)·url, `budget is None`, `extra` = 원문 전부 → 수집기별 `test_item_maps_to_notice`
-  - [ ] 항목 계약(null 제목·ID 없음·ID 0·선택 필드 null·extra 원문) → `test_item_contract` CASES에 4종 편입
-  - [ ] 1페이지 HTTP 오류 → 0건 + errors(키 마스킹), 2페이지 실패 → 1페이지 보존 + errors → 수집기별 `test_*_page_failure_*`
-  - [ ] `resultCode` 에러 코드 → errors에 코드·메시지, 빈 본문(HTTP 200) → errors에 "빈 응답" → `test_datagokr` + 수집기별
-  - [ ] totalCount만큼 페이지를 넘기고, max_pages 상한이면 절단 사실과 전체 건수를 errors에 → 수집기별 `test_paginates_*`·`test_max_pages_truncation_reported`
-  - [ ] 실호출: 최근 기간 1건 이상, 항목마다 extra 키 수 == 비어 있지 않은 원문 필드 수 → `test_integration_institutions.py`(integration)
+- 공통 수용 기준(4개 모두). 페이지 루프·파싱은 `utils/datagokr.py` 한 곳이라 그 동작은 헬퍼 테스트가 한 번 재고, 수집기별 테스트는 배선(URL·인자·라벨)을 잰다:
+  - [x] 항목 → Notice: 제목·기관·공고일·마감일·category(출처의 업무 구분)·url, `budget is None`, `extra` = 원문 전부
+    → LH·가스·수자원 `test_item_maps_to_notice` · d2b `test_bid_no_by_list`(5, url·마감·extra 포함)·`test_domestic_fields`
+  - [x] 항목 계약(null 제목·ID 없음·ID 0·선택 필드 null·extra 원문) → `test_item_contract` CASES에 4종 편입(d2b는 bad_format 없음 — 사유 주석)
+  - [x] 1페이지 HTTP 오류 → 0건 + errors(키 마스킹), 2페이지 실패 → 1페이지 보존 + errors → 수집기별 `test_first_page_failure_is_reported_and_key_masked`
+    (d2b `test_one_list_failure_keeps_others`) · 헬퍼 `test_datagokr::test_second_page_failure_keeps_first`
+  - [x] `resultCode` 에러 코드 → errors에 코드·메시지, 빈 본문(HTTP 200) → errors에 "빈 응답", 게이트웨이 에러 → `returnReasonCode`
+    → `test_datagokr::TestParseXml` 7건 · LH·가스 `test_error_code_is_reported` · 수자원 `test_empty_body_is_failure`·`test_error_code_raises`·`test_one_operation_failure_keeps_others`
+  - [x] totalCount만큼 페이지를 넘기고, max_pages 상한이면 절단 사실과 전체 건수를, totalCount가 남았는데 빈 페이지면 받은 건수와 전체 건수를 errors에
+    → 헬퍼 `test_paginates_until_total`·`test_max_pages_truncation_reported_with_total`·`test_empty_middle_page_with_total_left_is_reported` · LH·가스 `test_paginates_by_total_count`
+  - [x] 실호출: 최근 기간 1건 이상·errors 없음·합쳐진 공고 0(`total_fetched == total_after_dedup`)·원문 1페이지를 따로 받아 겹치는 항목마다 extra 키 집합 ==
+    비어 있지 않은 원문 필드 집합(d2b는 국내경쟁, 수자원은 최근 달 용역 대조) → `test_integration_institutions.py` 4건(2026-09-26 통과)
 
 ### F-011: LH 입찰공고 수집 (`LhCollector`)
 - **설명**: `GET apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo`(15159012) — XML **EUC-KR**, 공고일(`tndrbidRegDt`) 범위 `tndrbidRegDtStart/End`,
@@ -248,11 +253,11 @@
   organization "한국토지주택공사", end_date = `tndrdocAcptEndDtm`, category = `cstrtnJobGbNm`(시설공사·용역·지급자재·물품),
   url = LH 전자입찰 상세(알리오 refrUrl에서 확인한 업무별 경로 — 시설공사 Construct·용역 srvcs·지급자재 ctrctgds, 물품은 미확인이라 목록 화면).
 - **수용 기준**:
-  - [ ] 공통 기준 전부
-  - [ ] `resultCode 03` → 0건·errors 없음 → `test_nodata_is_empty_not_error`
-  - [ ] EUC-KR 바이트 응답의 한글 제목이 깨지지 않는다 → `test_euc_kr_response`
-  - [ ] 업무 구분별 url 경로(3종 + 물품 목록 화면) → `test_detail_url_by_job_type`
-- **상태**: 진행
+  - [x] 공통 기준 전부
+  - [x] `resultCode 03` → 0건·errors 없음 → `test_nodata_is_empty_not_error`
+  - [x] EUC-KR 바이트 응답의 한글 제목이 깨지지 않는다 → `test_euc_kr_response`
+  - [x] 업무 구분별 url 경로(3종 + 물품 목록 화면) → `test_detail_url_by_job_type`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
 
 ### F-012: 한국가스공사 입찰정보 수집 (`KogasCollector`)
 - **설명**: `GET apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2`(15157366) — XML, 공고일(`NOTICE_DT`) 범위 `DOCDATE_START/END`.
@@ -260,9 +265,9 @@
   end_date = `END_DT`, category = `WORK_TYPE_NAME`, url = `bid.kogas.or.kr:9443/.../bid_detail_view_notice.jsp?notice_code=&bid_code=001&round=01`(알리오 refrUrl 11건 전부 001/01).
   취소는 `CANCEL_YN` 원문(extra).
 - **수용 기준**:
-  - [ ] 공통 기준 전부
-  - [ ] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
-- **상태**: 진행
+  - [x] 공통 기준 전부
+  - [x] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
 
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)
 - **설명**: `apis.data.go.kr/1690000/BidPblancInfoService`(15158416) 목록 5종 — XML(JSON은 `dcsNo`가 int/str로 섞인다). 오퍼레이션당 100회/일.
@@ -272,13 +277,13 @@
   시설수의 키 `{pblancNo}{cntrwkNo}`, 차수 5종 모두 `pblancOdr` — `g2bPblancOdr`는 취소·정정에도 그대로라 쓰지 않는다, 2026-09-26 실측). organization = `ornt`(국외경쟁 목록엔 없어 "방위사업청" — 국외 조달은 방위사업청 직접),
   category = `busiDivs`, url = d2b 입찰공고 화면(상세 링크 필드 없음). 목록 하나가 실패해도 나머지 목록 결과는 보존.
 - **수용 기준**:
-  - [ ] 공통 기준 전부
-  - [ ] 5종 각각의 bid_no 형식·제목·마감 필드 → `test_bid_no_by_list`(5)
-  - [ ] 취소공고(같은 g2bPblancOdr, pblancOdr만 다름)는 원공고와 다른 bid_no(회귀 — 실측 7일 9건 합쳐짐) → `test_cancel_notice_is_separate_from_original`
-  - [ ] 수의 2종의 start_date는 None(협상 예정일을 공고일로 쓰지 않는다) → `test_negotiation_has_no_start_date`(2)
-  - [ ] 목록 1종 실패 → 나머지 4종 결과 보존 + errors에 그 목록 이름 → `test_one_list_failure_keeps_others`
-  - [ ] 국외경쟁 요청에 개찰일 범위, 수의 2종 요청에 견적서 마감 범위가 들어간다 → `test_list_date_params`
-- **상태**: 진행
+  - [x] 공통 기준 전부
+  - [x] 5종 각각의 bid_no 형식·제목·마감 필드 → `test_bid_no_by_list`(5)
+  - [x] 취소공고(같은 g2bPblancOdr, pblancOdr만 다름)는 원공고와 다른 bid_no(회귀 — 실측 7일 9건 합쳐짐) → `test_cancel_notice_is_separate_from_original`
+  - [x] 수의 2종의 start_date는 None(협상 예정일을 공고일로 쓰지 않는다) → `test_negotiation_has_no_start_date`(2)
+  - [x] 목록 1종 실패 → 나머지 4종 결과 보존 + errors에 그 목록 이름 → `test_one_list_failure_keeps_others`
+  - [x] 국외경쟁 요청에 개찰일 범위, 수의 2종 요청에 견적서 마감 범위가 들어간다 → `test_list_date_params`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)
 - **설명**: `apis.data.go.kr/B500001/ebid/tndr3/{cntrwkList,servcList,gdsList,dmscptList}`(15101635) — JSON, 날짜 필터는 **월 단위 `searchDt=YYYYMM`**(공고일 기준) 하나뿐 →
@@ -288,13 +293,13 @@
   bid_no = `KWATER-{tndrPbanno}`. organization "한국수자원공사", end_date = `tndrPblancEnddt`(`-`는 없음), category = `cntrctDivNm`,
   url = `ebid.kwater.or.kr/fz?bidno=`. 취소 공고는 API에서 빠진다. 범위 밖: 사전규격·발주계획(공고번호 없음)·입찰결과.
 - **수용 기준**:
-  - [ ] 공통 기준 전부
-  - [ ] `items`가 `""`(0건)·dict(1건)·list 모두 처리 → `test_items_shapes`(3)
-  - [ ] 기준일이 전월이면 전월·당월 두 달을 요청하고 공고일로 거른다 → `test_month_span_and_cutoff_filter`
-  - [ ] 마감일 `-` → end_date None, 항목은 유지 → `test_dash_deadline_is_none`
-  - [ ] 달마다 한 페이지(numOfRows 1000) 1회, 빈 본문이면 50건씩 나눠 받고 겹친 행 수를 errors에(회귀 — 실측 4건 누락)
+  - [x] 공통 기준 전부
+  - [x] `items`가 `""`(0건)·dict(1건)·list 모두 처리 → `test_items_shapes`(3)
+  - [x] 기준일이 전월이면 전월·당월 두 달을 요청하고 공고일로 거른다 → `test_month_span_and_cutoff_filter`
+  - [x] 마감일 `-` → end_date None, 항목은 유지 → `test_dash_deadline_is_none`
+  - [x] 달마다 한 페이지(numOfRows 1000) 1회, 빈 본문이면 50건씩 나눠 받고 겹친 행 수를 errors에(회귀 — 실측 4건 누락)
     → `test_collects_four_operations_with_params` · `test_falls_back_to_small_pages_and_reports_overlap`
-- **상태**: 진행
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
 
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).

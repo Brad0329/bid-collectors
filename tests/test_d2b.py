@@ -34,6 +34,7 @@ ITEMS = {
     "시설수의": {"cntrwkNm": "조사본부 야외데크 보수공사", "pblancNo": "MCN0044", "cntrwkNo": "2026-14402", "pblancOdr": "1",
               "ornt": "국방부근무지원단", "busiDivs": "공사", "ntatPlanDate": _d(0), "prqudoPresentnClosDt": _d(2) + "1000"},
 }
+END_DAYS = {"국내경쟁": 3, "국외경쟁": 10, "시설경쟁": 3, "국내수의": 2, "시설수의": 2}
 BID_NO = {
     "국내경쟁": "D2B-국내경쟁-2026ERA00055606N-3",
     "국외경쟁": "D2B-국외경쟁-2026ELA0026BBAL6013005-1",
@@ -71,7 +72,8 @@ class TestMapping:
         assert n.source == "국방전자조달"
         assert n.category == ITEMS[kind]["busiDivs"]
         assert n.budget is None
-        assert n.end_date is not None
+        assert n.end_date == date.today() + timedelta(days=END_DAYS[kind])  # 목록마다 다른 마감 필드
+        assert n.url == "https://www.d2b.go.kr/"  # 상세 링크 필드가 없다 — 첫 화면
         assert n.extra == ITEMS[kind]  # 원문 전부, 이름 그대로
 
     def test_domestic_fields(self):

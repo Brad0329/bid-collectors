@@ -180,10 +180,20 @@
   - 범위 밖: 첨부 파일 내려받기(url만 준다) · 수자원 목록 마감일을 상세 일정으로 채우기(수집 시점 정규화 — bidwatch 요청서 §4, 원칙 ②)
   - 완료 조건: REQUIREMENTS F-011~F-014 (v1.5.0) 기준 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
 
+- [ ] Phase 011: 원칙 ② 표준 필드 파생 제거 + d2b 공고 url을 상세 화면으로 (F-001~F-014 원칙 ②·F-013) — **버전은 변경안 확정 후(제거·타입 변경이 섞이면 major)**
+  - 출처: ① 원칙 ② — REQUIREMENTS 공통 계약 원칙 ②·미결 질문(status) + bidwatch `docs/source_fields.md` 부록 A 남은 #2·#5·#6·#7·#8
+    (**#6 공사 지역·#8 취소는 bidwatch가 이미 `extra` 원문으로 처리 중** — handover에 바뀐 값·조건을 적어 bidwatch 로직과 맞춘다, 2026-09-25 bidwatch 요청)
+    ② bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_d2b_detail_url.md`(2026-09-26 — 팝업 바로가기가 d2b 첫 화면으로 열림). 발급 2026-09-26 사용자(둘을 한 Phase로).
+  - 트랙: **일반**(BidWatch가 받는 표준 필드 값이 바뀐다 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(태그 v1.5.0).
+    major가 섞이면 editable 설치라 커밋 즉시 bidwatch가 새 값을 받는다 → 구현은 브랜치, bidwatch 반영 시점에 main 병합(변경안 확정 때 결정).
+  1. **조사(읽기만)** — bidwatch가 표준 필드를 어디서 읽고 무엇을 덮는지 영향표 · 이 패키지 전 수집기의 원칙 ② 위반 목록(Phase 009 기관 4종·알리오 포함) · d2b 상세 화면 주소 실측
+  2. **변경안** — CONTRACT.md에 필드별 전후·버전 판정 + REQUIREMENTS 수용 기준 · 결정 필요 항목(status 처리 방식·기관 budget·region 원천 등)을 사용자에게
+  3. 구현 — 수집기별 커밋(사다리 + 변이 확인) · d2b url
+  4. 통합 실측(표본 수 기록) · interface.md · README · 버전 · handover `docs/handover/v<버전>.md`
+  - 완료 조건: REQUIREMENTS 원칙 ② `[x]` + F-013 url 기준 `[x]`(테스트 대응·변이 확인) · 전체 테스트 0 failed · 실측 · BidWatch `backend/tests` 통과 · handover
+
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
-- **원칙 ② Phase(일반 트랙)** — 표준 필드 파생 제거 + bidwatch 필드 사전 부록 A 남은 #2·#5·#6·#7·#8(end_date·budget·region·organization·status).
-  **#6(공사 지역)·#8(취소)은 bidwatch가 이미 `extra` 원문으로 처리 중** — 표준 필드를 바꿀 때 handover에 바뀐 값·조건을 적어 bidwatch 로직과 맞춘다(2026-09-25 bidwatch 요청).
 - **자체조달 기관 수집기** — 요청서 `bidwatch/docs/requests/bid-collectors_institution_collectors.md`(2026-09-25). ① 조사(기관별 실호출·인증·호출 수·알리오 연결 키) →
   사용자가 구현 기관 선택 → ② 구현. 조사 결과는 `docs/institution_sources.md`.
 

@@ -31,14 +31,16 @@ DEFAULT_MAX_PAGES = 20
 NODATA = ("03",)
 ORGANIZATION = "한국토지주택공사"  # 단일 기관 API라 응답에 기관 필드가 없다 — 알리오 pname과 같은 이름(지역본부는 extra의 zoneHqCd)
 
-# LH 전자입찰 상세 화면 — 업무 구분(cstrtnJobGbNm)마다 경로가 다르다. 알리오 refrUrl 17건에서 확인한 3종만 둔다(2026-09-25).
+# LH 전자입찰 상세 화면 — 업무 구분(cstrtnJobGbNm)마다 경로가 다르다. 3종은 알리오 refrUrl 17건(2026-09-25),
+# 물품은 검색 화면 JS의 업무 코드 30 경로로 확인(2026-09-26 표본 5건 + 실측 1건 열림).
 _DETAIL_BASE = "https://ebid.lh.or.kr/ebid.et.tp.cmd."
 _DETAIL_CMD = {
     "시설공사": "BidConstructDetailListCmd",
     "용역": "BidsrvcsDetailListCmd",
     "지급자재": "BidctrctgdsDetailListCmd",
+    "물품": "BidgdsDetailListCmd",
 }
-# 물품(365일 76건)은 상세 경로 표본이 없다 — 추측한 경로로 깨진 링크를 주지 않고 전자입찰 첫 화면으로
+# 모르는 업무 구분 — 추측한 경로로 깨진 링크를 주지 않고 전자입찰 첫 화면으로
 LIST_URL = "https://ebid.lh.or.kr/"
 
 # ── 상세(v1.5.0) — 공식 API가 아니라 전자입찰 사이트 화면이다. 사이트 개편 시 깨지며 그때는 예외로 드러난다.

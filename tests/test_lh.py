@@ -63,7 +63,8 @@ class TestMapping:
         assert "BidConstructDetailListCmd" in detail_url("시설공사", "1", "00")
         assert "BidsrvcsDetailListCmd" in detail_url("용역", "1", "00")
         assert "BidctrctgdsDetailListCmd" in detail_url("지급자재", "1", "00")
-        assert detail_url("물품", "1", "00") == LIST_URL  # 경로 표본이 없다 — 깨진 링크 대신 첫 화면
+        assert "BidgdsDetailListCmd" in detail_url("물품", "1", "00")  # 2026-09-26 확인(검색 화면 JS 업무 코드 30)
+        assert detail_url("모르는업무", "1", "00") == LIST_URL  # 깨진 링크 대신 첫 화면
 
 
 class TestFetch:

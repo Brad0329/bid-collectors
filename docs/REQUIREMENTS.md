@@ -257,12 +257,12 @@
 - **설명**: `GET apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo`(15159012) — XML **EUC-KR**, 공고일(`tndrbidRegDt`) 범위 `tndrbidRegDtStart/End`,
   numOfRows 상한 없음(1000씩). 빈 결과 = `resultCode 03 NODATA`(0건). bid_no = `LH-{bidNum}` — 정정·취소는 같은 행의 `bidDegree`·공고일이 바뀐다(차수 제외).
   organization "한국토지주택공사", end_date = `tndrdocAcptEndDtm`, category = `cstrtnJobGbNm`(시설공사·용역·지급자재·물품),
-  url = LH 전자입찰 상세(알리오 refrUrl에서 확인한 업무별 경로 — 시설공사 Construct·용역 srvcs·지급자재 ctrctgds, 물품은 미확인이라 목록 화면).
+  url = LH 전자입찰 상세(업무별 경로 — 시설공사 Construct·용역 srvcs·지급자재 ctrctgds·물품 gds(2026-09-26 확인, 종전 목록 화면), 모르는 업무는 첫 화면).
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] `resultCode 03` → 0건·errors 없음 → `test_nodata_is_empty_not_error`
   - [x] EUC-KR 바이트 응답의 한글 제목이 깨지지 않는다 → `test_euc_kr_response`
-  - [x] 업무 구분별 url 경로(3종 + 물품 목록 화면) → `test_detail_url_by_job_type`
+  - [x] 업무 구분별 url 경로(4종 + 모르는 업무는 첫 화면) → `test_detail_url_by_job_type`
   - [x] (v1.5.0) fetch_detail: 검색(`BidMasterListCmd`, 날짜 칸 비움) 1회로 최신 차수·업무 코드(10 시설공사·20 용역·30 물품·40 지급자재)를 얻어
     그 업무의 상세 화면을 그 차수로 부른다 → `test_detail_uses_latest_degree_and_job_cmd`·`test_job_code_to_cmd`(3)
   - [x] (v1.5.0) 항목형 표 → 키 `"표 이름/항목명"`(값 공백 정리·빈 값 제외), 목록형 표(요구면허·파일정보·공고변경정보) → `표 이름` list[dict],

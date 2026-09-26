@@ -932,7 +932,7 @@ lets_portal은 모든 요청에 `verify=False`. bid-collectors는 `verify=True` 
 
 ## 8. 향후 확장 로드맵
 
-> 2026-09-23: 아래 "Phase 3/4"는 구 번호다. 현재 일정의 원본은 `work_log/plan.md` '이후 단계'(JSON API 모드 = v1.2).
+> 2026-09-23: 아래 "Phase 3/4"는 구 번호다. 현재 일정의 원본은 `work_log/plan.md`(JSON API 모드·§8-2·§8-3은 '보류 항목', 2026-09-26).
 
 ### 8-1. JSON API 모드 (Phase 3)
 

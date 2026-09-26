@@ -6,7 +6,7 @@
 > (구 Phase 0 → 001, 1 → 002, 2 → 003). 옛 로그 본문의 "Phase N"은 구 번호다 — 로그는 내용 불변으로 옮겼다.
 > **"Phase 3"의 두 뜻 정리**: 구 plan.md의 "Phase 3"은 공기업 API 5종, `Phase_003.md`(구 phase2.md) §8·§13과
 > `docs/generic_scraper.md` §8의 "Phase 3"은 JSON API 모드였다. 둘 다 번호를 떼고 아래 '이후 단계'로 옮겼다
-> (JSON API 모드 = v1.2, 공기업 API = 필요성 판단 후).
+> (JSON API 모드 = '보류 항목' 2026-09-26, 공기업 API = 필요성 판단 후).
 
 ## 시스템 개요
 - 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부·알리오, 자체조달 기관 LH·가스공사·국방 d2b·수자원공사)와 임의 HTML
@@ -187,9 +187,6 @@
 - **자체조달 기관 수집기** — 요청서 `bidwatch/docs/requests/bid-collectors_institution_collectors.md`(2026-09-25). ① 조사(기관별 실호출·인증·호출 수·알리오 연결 키) →
   사용자가 구현 기관 선택 → ② 구현. 조사 결과는 `docs/institution_sources.md`.
 
-- **v1.2 JSON API 모드** — 설계 `docs/generic_scraper.md` §8-1(`api_mode="json"`). 그 뒤 전용 사이트:
-  창조경제혁신센터 7개 지역 · 부산창업포탈 · 한국예탁결제원 · 창조경제혁신센터 지원사업(lets_portal 전용 수집기 — `docs/dev_reference.md` §8).
-  같은 문서의 후보: §8-2 `bid_no_regex`(URL의 안정적 ID로 bid_no) · §8-3 상세 페이지 스크래핑.
 - **공기업 API 5종 — 필요성 판단 후** (구 plan.md "Phase 3", data.go.kr 서비스 ID까지 조사 완료):
   LH 입찰공고 15021183(+ 계약 15021184·발주계획 15042795·사전규격 15042796·개찰 15057180) · 한전 전자입찰계약 15148223 ·
   도로공사 전자조달 계약공개 15128076 · 수자원공사 전자조달 입찰공고 15101635 · 방위사업청 입찰공고 15002040(+ 결과 15002018·
@@ -247,6 +244,14 @@
 
 > 조사만 하고 미룬 것을 여기 남긴다. **다시 조사하지 않아도 되도록 실측 결과와 근거까지** 적는다.
 
+- **GenericScraper JSON API 모드 — 보류(2026-09-26 사용자)**. 근거: BidWatch 수요 없음(bidwatch `docs/`·코드에 JSON 모드 요청 0건, 2026-09-26 grep).
+  **다시 여는 조건**: BidWatch가 대상 사이트(창조경제혁신센터 7개 지역 · 부산창업포탈 · 한국예탁결제원 · 창조경제혁신센터 지원사업 —
+  lets_portal 전용 수집기, `docs/dev_reference.md` §8)가 필요하다고 요청할 때.
+  역할 분담(2026-09-26 정리): JSON 수집 엔진(`_fetch_json`·`ScraperConfig` 필드·실패/절단 보고)은 이 패키지, 내부 JSON 주소 감지·config 생성·스케줄은 BidWatch.
+  착수 시 주의: 설계 `docs/generic_scraper.md` §8-1은 2026-04 초안 — Phase 004~006 규칙(errors·절단 보고·항목 건너뜀·`extra` 원문 전부)이 없어 재스펙화 필요 /
+  `ScraperConfig` 필드 추가 = 계약 게이트(minor) / 기존 HTML 모드 `bid_no` 형식 불변. 같은 문서의 후보 §8-2 `bid_no_regex`·§8-3 상세 페이지 스크래핑도 함께 보류.
+  ("v1.2 JSON 모드"라는 옛 이름은 버린다 — 1.2.x는 다른 작업이 썼다.)
+
 - **(approval-audit 2026-09-26, `8938593`) 다음 Phase 끝에 효과 확인** — 새 훅 `no_shell_file_write`·루트 `git -C` 쓰기 차단은 습관 교정이라
   이 세션에서 전후 비교가 안 됐다. 다음 `/approval-audit`에서 `python scripts/measure_wait.py --grep "cat >>"`·`--grep "git -C"`로 0건인지,
   그리고 훅에 막혀 Edit로 돌아간 흐름이 느려지지 않았는지 본다(bidwatch pytest 규칙은 이미 재검증: 290s → 34.5s).
@@ -272,7 +277,7 @@
   - 일반 트랙: interface.md GenericScraper `collect(days=30)`인데 실제 기본 1 ·
     429 재시도 nara에만 · `_fetch_extended` 부분 결과 보존 없음
   - 정리 Phase 후보: 중복 로직(페이지 루프·절단 문구 4종·cutoff 7곳·health_check 7벌·extra 비우기 9벌·금액 파싱 2갈래) /
-    문서 복수 원본(버전 표기 CLAUDE.md·plan.md v1.1.0·interface.md v1.2.0 · plan.md·README에 알리오와 v1.2.x 기록 없음 · "v1.2=JSON 모드" 이름 충돌 ·
+    문서 복수 원본(버전 표기 CLAUDE.md·plan.md v1.1.0·interface.md v1.2.0 · plan.md·README에 알리오와 v1.2.x 기록 없음 · ~~"v1.2=JSON 모드" 이름 충돌~~(2026-09-26 이름 버림) ·
     훅 개수 · qa-tester.md 자리표시자 · status `cancelled` · F-008 상태 · CONTRACT.md 알리오 반영 칸 · pre_ready.md 구 번호)
 
 - **템플릿 규칙 위반 — 이식 시점(2026-09-23) 발견**. 조용한 실패·절단·session_init 무검사·행 파싱 예외 debug는 Phase 004에서 해소. 남은 것:

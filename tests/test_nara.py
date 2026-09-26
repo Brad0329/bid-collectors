@@ -489,7 +489,7 @@ CONTRACT_ITEM_XML = """\
 
 PRESPEC_ITEM_XML = """\
 <item>
-  <bfSpecRgstNo>P26000999</bfSpecRgstNo><prdctClsfcNoNm>사전규격 품명</prdctClsfcNoNm>
+  <bfSpecRgstNo>P26000999</bfSpecRgstNo><prdctClsfcNoNm>사전규격 품명</prdctClsfcNoNm><bsnsDivNm>용역</bsnsDivNm>
   <orderInsttNm>발주기관</orderInsttNm><opninRgstClseDt>2099-12-31 18:00</opninRgstClseDt>
   <specDocFileUrl1>https://example.com/s1.pdf</specDocFileUrl1>
   <specDocFileUrl2>https://example.com/s2.pdf</specDocFileUrl2>
@@ -509,10 +509,25 @@ class TestNaraExtended:
         assert len(notices) == 1
         n = notices[0]
         assert n.bid_no == "사전규격-용역-P26000999"
+        assert (n.title, n.category) == ("사전규격 품명", "용역")  # v1.6.0 — category = 업무 구분(종전 제목과 같은 값)
         assert str(n.end_date) == "2099-12-31"
         assert [a["url"] for a in n.attachments] == ["https://example.com/s1.pdf", "https://example.com/s2.pdf"]
         # 사전규격 API만 ServiceKey(대문자 S)
         assert "ServiceKey" in route.calls[0].request.url.params
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_pre_specs_without_title_are_skipped_not_synthesized(self, caplog):
+        """v1.6.0 원칙 ② — 제목(prdctClsfcNoNm)이 없으면 "사전규격 {번호}"를 만들지 않고 건너뛰어 경고(2건 중 1건)."""
+        from bid_collectors.nara import PRE_SPEC_BASE_URL, PRE_SPEC_SERVICES
+
+        two = PRESPEC_ITEM_XML + "<item><bfSpecRgstNo>P2</bfSpecRgstNo><orderInsttNm>기관</orderInsttNm></item>"
+        respx.get(f"{PRE_SPEC_BASE_URL}/{PRE_SPEC_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(two, total_count=2)))
+        with caplog.at_level(logging.WARNING, logger="bid_collectors"):
+            notices = await NaraCollector(api_key="test-key").collect_pre_specs(days=1, bid_types=["용역"])
+        assert [n.bid_no for n in notices] == ["사전규격-용역-P26000999"]
+        assert "1건 건너뜀" in caplog.text and "prdctClsfcNoNm" in caplog.text
 
     @pytest.mark.asyncio
     @respx.mock

@@ -234,7 +234,9 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         return el.text.strip() if el is not None and el.text else ""
 
     ref_no = t("bfSpecRgstNo") or t("refNo")
-    require_fields(bfSpecRgstNo=ref_no)  # 빈 ID는 `사전규격-용역-`로 합쳐진다(v1.2.5 A). 제목은 품명 폴백이 있어 검사하지 않는다
+    # 제목 = prdctClsfcNoNm(이름은 품명이지만 값은 사업명 — 2026-09-26 실측 3업무 222건 빈 값 0). 종전 "사전규격 {번호}" 합성 폴백 제거(v1.6.0)
+    title = t("prdctClsfcNoNm")
+    require_fields(bfSpecRgstNo=ref_no, prdctClsfcNoNm=title)  # 빈 ID는 `사전규격-용역-`로 합쳐진다(v1.2.5 A)
     rcpt_date = parse_date(t("rcptDt")) or ""
     opinion_close = parse_date(t("opninRgstClseDt")) or ""
 
@@ -251,7 +253,7 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     return Notice(
         source="나라장터",
         bid_no=f"사전규격-{bid_type}-{ref_no}",
-        title=t("prdctClsfcNoNm") or f"사전규격 {ref_no}",
+        title=title,
         organization=t("orderInsttNm"),
         start_date=rcpt_date or None,
         end_date=opinion_close or None,
@@ -259,7 +261,7 @@ def _prespec_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         url="https://www.g2b.go.kr",
         detail_url="",
         budget=budget,
-        category=t("prdctClsfcNoNm"),
+        category=t("bsnsDivNm"),  # 업무 구분(v1.6.0 — 종전엔 제목과 같은 prdctClsfcNoNm이 들어갔다)
         attachments=attachments or None,
         extra=raw_fields(item),  # 원문 전부(v1.2.5)
     )

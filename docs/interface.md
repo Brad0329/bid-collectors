@@ -22,22 +22,22 @@ class Notice(BaseModel):
     source: str              # 출처명 ("나라장터", "기업마당", "K-Startup", ...)
     bid_no: str              # 공고 고유번호 (source 내에서 UNIQUE)
     title: str               # 공고 제목
-    organization: str        # 발주/시행 기관명
+    organization: str        # 발주/시행 기관명 — 출처가 준 기관 필드. 없으면 "" (v1.6.0: 단일 기관 API의 상수를 넣지 않는다)
 
     # === 날짜/상태 ===
-    start_date: date | None = None   # 공고일
-    end_date: date | None = None     # 마감일
-    status: str = "ongoing"          # "ongoing" | "closed" | "cancelled"
+    start_date: date | None = None   # 공고일 — 출처에 따라 접수 시작일(기업마당·K-Startup·중소벤처)·최종낙찰일(낙찰)·체결일(계약) (v1.6.0 기준 정리 안 됨)
+    end_date: date | None = None     # 마감일 (기간 문자열이면 끝 날짜 — v1.6.0)
+    status: str = "ongoing"          # "ongoing" | "closed" | "cancelled" (아래 필드 규칙)
 
     # === URL ===
     url: str                         # 원문 URL (목록 페이지 또는 상세 페이지)
     detail_url: str = ""             # 상세 페이지 URL (url과 다를 경우)
 
     # === 내용 ===
-    content: str = ""                # 공고 내용 요약 (HTML 제거된 텍스트)
-    budget: int | None = None        # 예산/추정가격 (원 단위, None이면 미공개)
-    region: str = ""                 # 지역
-    category: str = ""               # 분류 (예: "용역 > 학술연구")
+    content: str = ""                # 공고 내용 (HTML 제거된 텍스트, 절단 없음 — v1.6.0)
+    budget: int | None = None        # 예산(배정예산 등 출처의 예산 필드 하나, 원 단위). 없으면 None — 추정가격으로 대체하지 않는다
+    region: str = ""                 # 지역 — 출처의 지역 필드. 없으면 "" (기관명을 넣지 않는다 — v1.6.0)
+    category: str = ""               # 분류 — 출처의 분류 필드 하나 (합성하지 않는다 — v1.6.0)
 
     # === 첨부파일 ===
     attachments: list[dict] | None = None
@@ -59,9 +59,10 @@ class Notice(BaseModel):
 |------|------|
 | `bid_no` 형식 | 수집기마다 자유. 단, source 내에서 UNIQUE 보장 |
 | `bid_no` 예시 | 나라장터: `"용역-20260405001-00"`, 기업마당: `"BIZINFO-12345"`, 알리오: `"ALIO-3580351"`, LH: `"LH-2603329"`, 가스공사: `"KOGAS-2026092314"`, 국방전자조달: `"D2B-국내경쟁-2026ERA00055606N-3"`, 수자원공사: `"KWATER-B5202603396"`, 스크래퍼: `"SCR-kocca-a1b2c3d4e5"` |
-| `status` 값 | `"ongoing"` (진행중), `"closed"` (마감), `"cancelled"` (취소). 기본값 `"ongoing"` |
+| `status` 값 | `"ongoing"` (진행중), `"closed"` (마감), `"cancelled"` (취소). 기본값 `"ongoing"`. **`cancelled`는 출처가 명시한 취소 표시만**(v1.6.0 — 나라장터 `ntceKindNm`·LH `bidKind`·d2b 경쟁 `pblancSe` = "취소공고", 가스 `CANCEL_YN` = "취소", d2b 수의 `progrsSttus` = "공개협상취소"). ongoing/closed는 마감일 기준 **편의 계산값**(원칙 ②의 명시적 예외 — 마감일이 없으면 ongoing, K-Startup은 출처의 `rcrt_prgs_yn`, 낙찰은 closed, GenericScraper는 게시일 기준 — 쓰지 말 것) |
+| 표준 필드 원칙 (v1.6.0) | 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수를 하지 않는다(CONTRACT.md 설계 원칙). 출처에 없으면 빈 값/None이고 원문은 `extra`에 있다. 예외: 위 status, 출처 ID로 만든 url·url 폴백(출처에 링크가 없으면 사이트 첫 화면 — 나라장터 사전규격 url·계약 detail_url·d2b 주소 불가), 원문 파일명이 없을 때 첨부 이름 자리표시자(`규격서1`·`첨부파일1`), K-Startup `only_ongoing=True` 기본값(등록일 필드가 없어 진행중이 유일한 범위 조건) |
 | `budget` | 원 단위 정수. 미공개/미확인이면 `None` |
-| `content` | HTML 태그 제거된 순수 텍스트. 공백/줄바꿈 정리 완료 상태 |
+| `content` | HTML 태그 제거된 순수 텍스트. 공백/줄바꿈 정리 완료 상태. 절단 없음(v1.6.0 — 종전 K-Startup·중소벤처 500자) |
 | `attachments` | `None`이면 첨부 없음. 빈 리스트 `[]`도 첨부 없음 |
 | `extra` | 응답 항목 원문 전부, 원래 이름(v1.2.5). BidWatch는 JSONB로 통째 저장하고 화면에 보일 키는 BidWatch가 고른다 |
 
@@ -312,12 +313,19 @@ result = await scraper.collect(days=30)
 | `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0), `fetch_detail` 첨부·원문 링크 (v1.3.0) |
 | `LhCollector` | `DATA_GO_KR_KEY` | LH 입찰공고(15159012) — source `"LH"`, bid_no `LH-{bidNum}`(정정·취소는 같은 bid_no로 갱신) (v1.4.0), `fetch_detail` (v1.5.0) |
 | `KogasCollector` | `DATA_GO_KR_KEY` | 한국가스공사 입찰정보(15157366) — source `"가스공사"`, bid_no `KOGAS-{NOTICE_CODE}` (v1.4.0), `fetch_detail` (v1.5.0) |
-| `D2bCollector` | `DATA_GO_KR_KEY` | 국방전자조달 목록 5종(15158416) — source `"국방전자조달"`, bid_no `D2B-{국내경쟁·국외경쟁·시설경쟁·국내수의·시설수의}-{키}-{차수}`. 수의 2종은 진행 중 전량(공고일 필터 없음, start_date None) (v1.4.0), `fetch_detail` (v1.5.0) |
+| `D2bCollector` | `DATA_GO_KR_KEY` | 국방전자조달 목록 5종(15158416) — source `"국방전자조달"`, bid_no `D2B-{국내경쟁·국외경쟁·시설경쟁·국내수의·시설수의}-{키}-{차수}`. 수의 2종은 견적서 마감 (오늘-days)~1년 뒤(공고일 필터 없음, start_date None — v1.6.0 전엔 오늘부터) (v1.4.0), `fetch_detail` (v1.5.0), url = 사이트 상세 화면 (v1.6.0 — 아래) |
 | `KwaterCollector` | `DATA_GO_KR_KEY` | 한국수자원공사 입찰공고 4종(15101635) — source `"수자원공사"`, bid_no `KWATER-{tndrPbanno}` (v1.4.0), `fetch_detail` (v1.5.0) |
 | `GenericScraper` | (없음) | config만 필요 |
 
-- 기관 수집기 4종(v1.4.0) 공통: `budget`은 `None` — 추정가격·기초금액·설계가 등 금액은 `extra`에 원래 이름으로 있다(어느 것을 budget으로 볼지는 원칙 ② 결정 전).
-  `organization`은 LH·가스·수자원이 기관 공식명(알리오 `pname`과 같은 이름), d2b는 발주기관 `ornt`. `category`는 출처의 업무 구분(시설공사·용역·물품 등).
+- 기관 수집기 4종(v1.4.0) 공통: `budget`은 출처의 **예산** 필드만 — d2b 수의 2종 `budgetAmount`(v1.6.0), 그 밖(LH·가스·수자원·d2b 경쟁 3종)은 예산 필드가 없어 `None`.
+  추정가격·기초금액·기초예비가격·설계가는 예산이 아니라 옮기지 않는다 — `extra`에 원래 이름으로 있다.
+  `organization`은 d2b 발주기관 `ornt`만 — LH·가스·수자원·d2b 국외경쟁은 응답에 기관 필드가 없어 `""`(v1.6.0 — 종전 공식명 상수, 기관은 `source`로 안다).
+  `category`는 출처의 업무 구분(시설공사·용역·물품 등 — LH가 문자열 `"null"`을 주면 `""`).
+  LH `url`은 업무 구분별 상세 화면이고, 업무 구분을 모르면 전자입찰 첫 화면 + errors `"[LH] 업무 구분을 몰라 … 첫 화면으로 둔 공고 — 'null' N건"`(v1.6.0).
+- d2b `url`(v1.6.0): 목록 API에 상세 링크가 없어 **사이트 상세 화면 GET 주소를 목록 원문 필드로 만든다 — 비공식 경로**(LH·가스·수자원 상세와 같은 취급,
+  사이트 개편 시 빈 화면·500이 될 수 있고 실패가 200으로 오기도 한다). 지명경쟁(`cntrctMth`)은 로그인이 필요해 구분별 목록 화면(시설 `announceList.do?key=41`·
+  물품 `goodsBidAnnounceList.do?key=13`·용역 `serviceBidAnnounceList.do?key=32`). 주소 필드가 비어 만들 수 없으면 첫 화면 + errors
+  `"[국방전자조달] 상세 화면 주소를 만들 수 없어 첫 화면으로 둔 공고 — 국내경쟁 N건 …"`. `detail_url`은 `""`.
   각 API는 data.go.kr 활용신청이 필요하고 한도는 오퍼레이션별이다(d2b만 100회/일).
 (한전·발전사(전력데이터개방포털 키 필요)·코레일·중소벤처24는 미구현 — bid-collectors `docs/institution_sources.md`)
 
@@ -325,7 +333,7 @@ result = await scraper.collect(days=30)
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.5.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.6.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

@@ -155,7 +155,8 @@ CASES = {
     ),
     LhCollector: Case(
         lambda: LhCollector(api_key="k"), _mock_lh,
-        lambda i: {"bidNum": i, "bidnmKor": f"공고{i}", "tndrbidRegDt": TODAY.strftime("%Y%m%d")},
+        # 업무 구분(v1.6.0) — 없으면 "첫 화면으로 둔 공고" errors가 붙는다(test_lh::test_unknown_job_type_is_reported)
+        lambda i: {"bidNum": i, "bidnmKor": f"공고{i}", "tndrbidRegDt": TODAY.strftime("%Y%m%d"), "cstrtnJobGbNm": "시설공사"},
         "bidNum", "bidnmKor", "0", "tndrdocAcptEndDtm",
         bad_format={"tndrbidRegDt": "날짜아님"},
     ),

@@ -48,7 +48,7 @@
     형식 이상(제목이 list) 케이스는 `test_bad_format_skips_only_that_item`이 기업마당·K-Startup·보조금24·나라장터·알리오 5종에 돈다(중소벤처는 XML이라 값이 전부 문자열 — 만들 수 없음)
 - **원칙 — 숨기지도 더하지도 않는다 (2026-09-25 사용자 확정, 결정 기록 `docs/CONTRACT.md` 설계 원칙 첫 항목)**: 출처가 주는 것은 전부
   가져와 정확히 전달되는 형식으로 넘기고, 쓸지 말지는 BidWatch가 정한다. 아래 두 기준은 **모든 수집기(나라장터 확장 3메서드 포함)의 완료 기준**이다 —
-  새 수집기도 이 둘을 채워야 완료. 상태: ① **완료**(v1.2.5, Phase 006, 2026-09-25 — GenericScraper·`fetch_detail`은 범위 밖, plan.md 보류) / ② **미착수**(일반 트랙, Phase 미발급).
+  새 수집기도 이 둘을 채워야 완료. 상태: ① **완료**(v1.2.5, Phase 006, 2026-09-25 — GenericScraper·`fetch_detail`은 범위 밖, plan.md 보류) / ② **완료**(v1.6.0, Phase 011, 2026-09-26 — 예외 4건은 아래).
   - [x] (원칙 ①, v1.2.5 Phase 006) `extra`에 응답 항목의 비어 있지 않은 필드 전부가 원래 이름 그대로 담긴다 — 고정 응답의 비어 있지 않은 필드 수와 `extra` 키 수가
     같고, 이름을 바꾼 키가 없다(확정 2026-09-25 기본안: 0·False 포함, None·빈 문자열·공백만 제외, XML 반복 태그는 list·자식 있는 태그는 dict, 요청 문맥
     `bid_type`·`data_type`은 뺀다 — bid_no 접두사에 있다, HTML 값도 원문 그대로) → `test_item_contract::test_extra_has_every_nonempty_field`·
@@ -57,12 +57,27 @@
     나라장터 응답 태그 중 용역 113개의 41개·물품 101의 40·공사 143의 37만 읽음 / 영어로 이름을 바꾼 키 / 이름이 틀려 항상 빈값인 키 2개(`cntrctMthdNm`·`bidQlftcRgstDt`) /
     공사 배정예산 `bdgtAmt` 미수신(extra에는 담긴다 — `budget` 표준 필드 반영은 원칙 ②). 공고첨부 태그 20개(`bidNtceFlNm*`·`bidNtceFlUrl*`) 루프는
     명세에도 없는 태그라 v1.3.1(Phase 008)에서 삭제
-  - [ ] (원칙 ②) 표준 필드는 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수·기본 필터가 없다 → 테스트 없음.
-    현재 위반(2026-09-25): `status`를 마감일로 추정(전 수집기 — 나라장터 취소공고 `ntceKindNm`가 ongoing으로 나감) · `budget` 배정예산→추정가격 대체(F-001) ·
-    `category` 대>중 합성(F-001) · `region`에 수요기관명 `dminsttNm`(F-001) · content 500자 절단(F-003·F-006) · organization 상수(F-006 "중소벤처기업부",
-    F-003 폴백 "창업진흥원") · `only_ongoing=True` 기본값(F-003). `only_business`(F-005)는 기본 False라 위반 아님 — 유지.
-  - 적용 트랙: ①은 계약 밖(`extra`) → 저위험 / ②는 BidWatch가 받는 값이 바뀜 → 일반 트랙(CONTRACT.md 변경안 → 사용자 확인 → 반영).
-    ②를 반영하면 F-001 budget·F-003 content 절단·only_ongoing·F-006 content 절단 기준은 그때 고쳐 쓴다(지금은 현재 동작 그대로 둔다).
+  - [x] (원칙 ②, v1.6.0 Phase 011) 표준 필드는 출처가 준 값을 통일된 타입으로만 담는다 — 추정·대체·합성·절단·상수·기본 필터가 없다(결정 CONTRACT.md 2026-09-26 행).
+    해소한 위반(2026-09-26 전수 조사) → 대응 테스트(변이 확인 `scripts/_tmp/mutate_phase011.py` 53건):
+    - 취소: 출처가 명시한 취소 표시 → `cancelled`(나라장터 `ntceKindNm`·LH `bidKind`·d2b 경쟁 `pblancSe` = "취소공고", 가스 `CANCEL_YN` = "취소", d2b 수의 `progrsSttus` = "공개협상취소")
+      → `test_status::test_cancelled_wins_over_dates`·`test_nara::test_cancel_notice_is_cancelled`·`test_lh::test_cancel_notice_is_cancelled`·`test_kogas::test_item_maps_to_notice`·`test_d2b::test_source_cancel_mark_is_cancelled`(4)
+    - 대체: 나라장터 budget 추정가격 대체(공사는 `bdgtAmt`) · 낙찰 budget(낙찰금액)·시작일 폴백 · 계약 총계약금액 폴백 · K-Startup organization `sprv_inst`·"창업진흥원" · 보조금24 content 지원내용 대체
+      → `test_budget_not_replaced_by_estimated_price`·`test_construction_budget_is_bdgtAmt_and_region_is_site`·`test_awards_mapping`·`test_extended_no_fallbacks`·`test_organization_no_fallback_to_sprv_inst`·`test_minimal_item`·`test_content_no_fallback_to_support`
+    - 합성: 나라장터 category "대 > 중" · 사전규격 제목 "사전규격 {번호}" · 보조금24 content "요약 + 지원내용"
+      → `test_category_service_is_large_class_only`·`test_category_no_fallback_to_other_class`·`test_pre_specs_without_title_are_skipped_not_synthesized`·`test_content_is_summary_only`
+    - 절단: content 500자(K-Startup·중소벤처) → `test_kstartup::test_content_not_truncated`·`test_smes::test_content_not_truncated`
+    - 상수: organization — 중소벤처·LH·가스·수자원·d2b 국외·GenericScraper(`config.name`) → `""` · K-Startup status `closed`(값 없을 때) → 마감일 판정
+      → `test_smes::test_full_item_mapping`·`test_lh/kogas/kwater::test_item_maps_to_notice`·`test_d2b::test_foreign_list_has_no_start_and_no_org`·`test_generic_scraper::test_notice_field_mapping`·`test_status_missing_rcrt_prgs_yn_uses_end_date`
+    - 의미가 다른 필드: region 수요기관명(나라장터)·소관기관(기업마당)·관할 구분(계약) → `""`(나라장터 공사는 `cnstrtsiteRgnNm`) · 중소벤처 category `writerPosition` → `""` ·
+      사전규격 category(제목과 같은 값) → `bsnsDivNm` · 계약 end_date(계약기간) → None · 기간 문자열의 **시작일**이 end_date(보조금24 `신청기한`) → 끝 날짜 · 기업마당 날짜 하나를 start_date로
+      → `test_full_item_mapping`(나라장터·기업마당)·`test_extended_no_fallbacks`·`test_smes::test_full_item_mapping`·`test_pre_specs_mapping`·`test_end_date_is_period_end`·`test_single_date_period_is_not_start_date`
+    - 기본 필터: d2b 수의 견적서 마감 "오늘부터" → (오늘-days)부터, 국외 개찰일 끝 1년 → 2년 → `test_d2b::test_list_date_params`
+    - (spec-checker 반영) d2b budget = 수의 2종 예산금액 `budgetAmount`(사용자 확인), 경쟁 3종 None — 기초금액·기초예비가격으로 대체하지 않는다 → `test_d2b::test_bid_no_by_list`(5)
+    **남은 것(범위 밖)**: `start_date`의 뜻이 출처마다 섞여 있다(공고일·접수 시작일·최종낙찰일·체결일) — 별도 결정(plan.md 보류). interface.md §1 주석에 현황을 적었다.
+    **명시적 예외(2026-09-26 사용자)**: ① ongoing/closed의 마감일 판정·낙찰 `closed`(편의 계산값 — 마감일이 없으면 ongoing, 계약은 늘 ongoing) ② 출처 ID로 만든 url·url 폴백(출처에 링크가 없으면 사이트 첫 화면 — 사전규격 url·계약 detail_url·d2b 주소 불가) ③ 원문 파일명이 없을 때 첨부 이름 자리표시자
+    ④ K-Startup `only_ongoing=True` 기본값(등록일 필드가 없고 서버 날짜 필터가 데이터에 먹지 않아 진행중이 유일한 범위 조건 — 실측 CONTRACT.md).
+    GenericScraper status(게시일 판정)는 2026-09-25 "안 함" 유지(BidWatch가 배지를 숨긴다). `only_business`(F-005)는 기본 False라 위반 아님.
+  - 적용 트랙: ①은 계약 밖(`extra`) → 저위험 / ②는 BidWatch가 받는 값이 바뀜 → 일반 트랙(CONTRACT.md 변경안 → 사용자 확인 → 반영, v1.6.0 handover).
 
 ## 기능 요구사항
 
@@ -73,7 +88,10 @@
   - [x] days를 7일 단위 범위(`yyyyMMdd0000`~`yyyyMMdd2359`)로 나눈다 → `TestSplitDateRange` 6건
   - [x] `resultCode != 00` 응답은 `ValueError` → `test_error_response_raises_valueerror`
   - [x] bid_no = `{용역|물품|공사}-{bidNtceNo}-{bidNtceOrd}`(차수 없으면 생략) → `test_bid_no_format`·`test_bid_no_without_ord`
-  - [x] budget = 배정예산, 없으면 추정가격(0원도 유효값) → `test_budget_and_est_price`
+  - [x] budget = 배정예산(용역·물품 `asignBdgtAmt`, 공사 `bdgtAmt`), 없으면 None — 추정가격으로 대체하지 않는다(0원도 유효값, v1.6.0 — 종전엔 추정가격 대체)
+    → `test_budget_and_est_price`·`test_budget_not_replaced_by_estimated_price`·`test_construction_budget_is_bdgtAmt_and_region_is_site`
+  - [x] (v1.6.0) region = 공사 `cnstrtsiteRgnNm`, 용역·물품 `""` / category = 업무별 원문 한 필드(용역 대분류·물품 세부품명·공사 주공종) / 취소공고 → cancelled
+    → `test_full_item_mapping`·`test_category_*`·`test_cancel_notice_is_cancelled`
   - [x] 공고규격서 1~10(`ntceSpecDocUrl`·`ntceSpecFileNm`, 이름 없으면 `규격서{i}`)이 attachments → `test_attachments_parsing`
     (v1.3.1: 종전 "공고첨부 1~10"의 `bidNtceFl*`는 명세·실측 3,360건에 없는 태그라 삭제 — 다른 첨부는 별도 오퍼레이션에만 있다)
   - [x] 여러 페이지를 totalCount까지 넘긴다 → `test_multi_page_pagination`
@@ -98,12 +116,16 @@
     `낙찰-용역-`처럼 접두사만으로 합쳐지지 않고 건너뛴다(계약 제목은 v1.3.1부터 `cntrctNm`|`cnstwkNm`) — 3건 입력 시 0건, 경고 로그에 사유별 건수(반환형이 list라 errors 채널 없음 — CONTRACT.md)
     → `TestNaraExtended::test_awards_without_id_are_skipped_not_merged`·`test_contracts_without_id_are_skipped_not_merged`·`test_pre_specs_without_id_are_skipped_not_merged`(caplog)
   - [x] (v1.2.5, 원칙 ①) 확장 3메서드의 `extra`도 응답 태그 전부·원래 이름(`bid_type`·`data_type` 없음) → `test_awards_mapping`
+  - [x] (v1.6.0, 원칙 ②) 낙찰 budget None(낙찰금액은 예산이 아니다)·start_date = 최종낙찰일만 / 계약 budget = 금차 금액만·end_date None(계약기간은 마감일이 아니다)·region ""·status 늘 ongoing /
+    사전규격 제목 = `prdctClsfcNoNm`만(없으면 건너뜀 — "사전규격 {번호}" 합성 없음)·category = `bsnsDivNm`
+    → `test_awards_mapping`·`test_extended_no_fallbacks`·`test_pre_specs_mapping`·`test_pre_specs_without_title_are_skipped_not_synthesized`
 - **상태**: 완료 (2026-04-11, 실 API 1일분 검증: 낙찰 15·계약 6,718·사전규격 322건 — `work_log/Phase_003.md` §11. 테스트 대응 2026-09-23, 빈 ID 병합 방지·원문 extra 2026-09-25 v1.2.5,
   계약 공사 제목 태그 2026-09-25 v1.3.1)
 
 ### F-003: K-Startup 사업공고 수집 (`KstartupCollector`)
-- **설명**: odcloud 형식 JSON. 접수시작일이 cutoff(자정 절삭) 이전이면 제외. `only_ongoing=True`(기본)면
-  모집중만 서버 필터. 상태는 API의 `rcrt_prgs_yn`으로 판정. content 500자 절단(전문은 `fetch_detail`).
+- **설명**: odcloud 형식 JSON. 접수시작일이 cutoff(자정 절삭) 이전이면 제외. `only_ongoing=True`(기본 — 원칙 ②의 명시적 예외, CONTRACT.md)면
+  모집중만 서버 필터. 상태는 API의 `rcrt_prgs_yn`(Y/N)으로, 값이 없으면 마감일로 판정. content 절단 없음(v1.6.0 — 종전 500자).
+  organization = `pbanc_ntrp_nm`만(v1.6.0 — 종전 `sprv_inst`·"창업진흥원" 폴백).
 - **수용 기준**:
   - [x] bid_no = `KSTARTUP-{pbanc_sn}` → `test_bid_no_format`
   - [x] cutoff 이전 접수시작 공고는 None → `test_cutoff_filtering_old_item_returns_none`
@@ -150,7 +172,8 @@
   - [x] bid_no = `MSS-{itemId}` → `test_bid_no_format`
   - [x] budget은 항상 None → `test_budget_always_none` (v1.3.1: 종전 `suptScale` 손 매핑은 명세 swagger 11키·실측 88건에 없는 태그라 삭제 — 값 불변)
   - [x] fileName/fileUrl 쌍 추출(이름 부족 시 `첨부파일N`) → `TestExtractAttachments` 3건
-  - [x] content 500자 절단 → `test_content_truncation_500_chars`
+  - [x] content 절단 없음 — 1000자 → 1000자(v1.6.0, 종전 500자) → `test_content_not_truncated`
+  - [x] (v1.6.0) organization·category `""`(기관 필드 없음 · `writerPosition`은 작성 부서, 원문은 extra) → `test_full_item_mapping`
   - [x] HTTP 오류·XML 에러 응답 시 0건 + errors에 원인 → `test_http_error_returns_empty`·`test_xml_error_response_returns_empty`
   - [x] 2페이지 resultCode 에러 시 1페이지 보존 → `test_second_page_xml_error_keeps_first_page`
 - **상태**: 완료 (2026-04-06, 없는 예산 원천 제거 2026-09-25 v1.3.1)
@@ -191,6 +214,8 @@
   - [x] `parse_date`: `YYYY-MM-DD`·`.`·`/`·`YYYYMMDD(HHMM)`·2자리 연도·`YYYY년 M월 D일`·기간 문자열의 시작일, 실패 시 None → `test_dates.py` 19건
   - [x] `clean_html_to_text`: 태그 제거·블록 태그 줄바꿈·엔티티 복원·연속 줄바꿈 2개로 → `test_text.py`
   - [x] `determine_status`: 마감일이 오늘 이후면 ongoing, 지났으면 closed, 파싱 불가면 ongoing → `test_status.py`
+  - [x] (v1.6.0) `determine_status(..., cancelled=True)`는 마감일과 무관하게 cancelled → `test_cancelled_wins_over_dates` /
+    `split_period("A ~ B")` → (시작, 끝), `~` 없으면 None · 점 뒤 공백 날짜("2026. 2. 1.") 인식 → `test_dates::TestDotSpaceFormat`
   - [x] `create_client`: User-Agent·타임아웃 기본값, 리다이렉트 추적, transport 인자(verify 등)를 transport로 전달 → `test_http.py`
 - **상태**: 완료
 
@@ -260,7 +285,8 @@
 ### F-011: LH 입찰공고 수집 (`LhCollector`)
 - **설명**: `GET apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo`(15159012) — XML **EUC-KR**, 공고일(`tndrbidRegDt`) 범위 `tndrbidRegDtStart/End`,
   numOfRows 상한 없음(1000씩). 빈 결과 = `resultCode 03 NODATA`(0건). bid_no = `LH-{bidNum}` — 정정·취소는 같은 행의 `bidDegree`·공고일이 바뀐다(차수 제외).
-  organization "한국토지주택공사", end_date = `tndrdocAcptEndDtm`, category = `cstrtnJobGbNm`(시설공사·용역·지급자재·물품),
+  organization `""`(기관 필드 없음 — v1.6.0, 종전 "한국토지주택공사" 상수), `bidKind` = "취소공고"이면 status `cancelled`(v1.6.0),
+  업무 구분이 문자열 `"null"`이면 category `""`·url 첫 화면이고 그 건수를 errors에(v1.6.0 — 2026-09-27 API가 127/127건 "null") → `test_lh::test_unknown_job_type_is_reported`, end_date = `tndrdocAcptEndDtm`, category = `cstrtnJobGbNm`(시설공사·용역·지급자재·물품),
   url = LH 전자입찰 상세(업무별 경로 — 시설공사 Construct·용역 srvcs·지급자재 ctrctgds·물품 gds(2026-09-26 확인, 종전 목록 화면), 모르는 업무는 첫 화면).
 - **수용 기준**:
   - [x] 공통 기준 전부
@@ -279,9 +305,9 @@
 
 ### F-012: 한국가스공사 입찰정보 수집 (`KogasCollector`)
 - **설명**: `GET apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2`(15157366) — XML, 공고일(`NOTICE_DT`) 범위 `DOCDATE_START/END`.
-  **날짜 누락·이름 오류도 00 + 0건** → 날짜 인자를 항상 보낸다. bid_no = `KOGAS-{NOTICE_CODE}`(10자리). organization "한국가스공사",
+  **날짜 누락·이름 오류도 00 + 0건** → 날짜 인자를 항상 보낸다. bid_no = `KOGAS-{NOTICE_CODE}`(10자리). organization `""`(v1.6.0, 종전 "한국가스공사" 상수),
   end_date = `END_DT`, category = `WORK_TYPE_NAME`, url = `bid.kogas.or.kr:9443/.../bid_detail_view_notice.jsp?notice_code=&bid_code=001&round=01`(알리오 refrUrl 11건 전부 001/01).
-  취소는 `CANCEL_YN` 원문(extra).
+  취소는 `CANCEL_YN` = "취소"이면 status `cancelled`(v1.6.0, 원문도 extra에).
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
@@ -293,11 +319,11 @@
 
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)
 - **설명**: `apis.data.go.kr/1690000/BidPblancInfoService`(15158416) 목록 5종 — XML(JSON은 `dcsNo`가 int/str로 섞인다). 오퍼레이션당 100회/일.
-  국내경쟁·시설경쟁 = 공고일 범위(`anmtDateBegin/End`) / 국외경쟁 = 공고일 범위 + 개찰일(`opengDateBegin/End` 필수 — 기준일~1년 뒤) /
-  국내·시설 공개수의협상 = 공고일 필터가 없어 **견적서 제출마감 오늘~1년 뒤(진행 중 전량)**, start_date None(공고일 필드 없음 — `ntatPlanDate`는 앞으로의 협상 예정일).
+  국내경쟁·시설경쟁 = 공고일 범위(`anmtDateBegin/End`) / 국외경쟁 = 공고일 범위 + 개찰일(`opengDateBegin/End` 필수 — 기준일~2년 뒤(v1.6.0, 종전 1년). 시작을 1년 전으로 넓히면 오류 없이 0건) /
+  국내·시설 공개수의협상 = 공고일 필터가 없어 **견적서 제출마감 (오늘-days)~1년 뒤**(v1.6.0 — 종전 오늘부터 = 진행 중 전량), start_date None(공고일 필드 없음 — `ntatPlanDate`는 앞으로의 협상 예정일).
   bid_no = `D2B-{구분}-{키}-{차수}`(구분 국내경쟁·국외경쟁·시설경쟁 키 `g2bPblancNo` / 국내수의 키 `{demandYear}{pblancNo}{dcsNo}`·
-  시설수의 키 `{pblancNo}{cntrwkNo}`, 차수 5종 모두 `pblancOdr` — `g2bPblancOdr`는 취소·정정에도 그대로라 쓰지 않는다, 2026-09-26 실측). organization = `ornt`(국외경쟁 목록엔 없어 "방위사업청" — 국외 조달은 방위사업청 직접),
-  category = `busiDivs`, url = d2b 입찰공고 화면(상세 링크 필드 없음). 목록 하나가 실패해도 나머지 목록 결과는 보존.
+  시설수의 키 `{pblancNo}{cntrwkNo}`, 차수 5종 모두 `pblancOdr` — `g2bPblancOdr`는 취소·정정에도 그대로라 쓰지 않는다, 2026-09-26 실측). organization = `ornt`(국외경쟁 목록엔 없어 `""` — v1.6.0, 종전 "방위사업청" 상수),
+  category = `busiDivs`, url = **사이트 상세 화면**(v1.6.0 — 목록 원문 필드로 만든 비공식 GET 주소, 종전 첫 화면. bidwatch 요청서 `bid-collectors_d2b_detail_url.md`). 목록 하나가 실패해도 나머지 목록 결과는 보존.
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] 5종 각각의 bid_no 형식·제목·마감 필드 → `test_bid_no_by_list`(5)
@@ -311,14 +337,20 @@
   - [x] (v1.5.0) 상세 `item` 필드 전부·원래 이름(`^` 구분 문자열은 원문 그대로), `attachments == []`·`content == ""` → `test_detail_maps_item`
   - [x] (v1.5.0) 목록에서 행을 못 찾음(상세를 부르지 않음)·상세 item 0개(없는 번호와 틀린 파라미터가 같은 응답)·`resultCode` ≠ 00 → 예외, HTTP 오류는 키를 가리고 원 예외를 체인에 남기지 않음
     → `test_detail_not_found_raises`·`test_detail_lookup_miss_raises_without_detail_call`·`test_detail_error_code_raises`·`test_http_error_raises_and_key_masked`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010)
+  - [x] (v1.6.0) url = 구분별 상세 화면 GET 주소 — 요청서 틀 + 메뉴 고정 파라미터(국내경쟁 `lv2Divs=1&pageDivs=G1&bid_divs=bid`·시설경쟁 `lv2Divs=1&pageDivs=E1`·
+    국내수의 `pageDivs=G`·시설수의 `pageDivs=E` — 없으면 새 세션 첫 클릭 500), 국외 `grd_bidxDate`=`opengDt` 앞 8자·`grd_dprtCode`=`pblancNo` 앞 3자, 시설수의 `ordr_year`=`cntrwkNo` 앞 4자
+    → `test_url_is_detail_page`(5, 경로·파라미터 전부 대조) · 통합 `test_d2b_real`(첫 화면 0건 + 구분별 1건 쿠키 없이 GET → 본문에 건명)
+  - [x] (v1.6.0) 지명경쟁(`cntrctMth`)은 로그인 필요 → 구분별 목록 화면(시설 key=41·물품 key=13·용역 key=32) → `test_nominated_competition_goes_to_list_page`(3)
+  - [x] (v1.6.0) 주소 필드가 비면 첫 화면 url로 공고는 돌려주고 errors에 "상세 화면 주소를 만들 수 없어…" + 구분별 건수(2건 결측 → 5건 반환·errors 1줄) → `test_unbuildable_url_is_reported`
+    (실측 2026-09-26: 7일 684건 결측 0, 지명경쟁 6건 목록 화면, 코드가 만든 상세 url 36/36 열림 — `scripts/_tmp/p011_d2b_live.py`)
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010) / url 상세 화면 완료 (2026-09-26, v1.6.0 Phase 011)
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)
 - **설명**: `apis.data.go.kr/B500001/ebid/tndr3/{cntrwkList,servcList,gdsList,dmscptList}`(15101635) — JSON, 날짜 필터는 **월 단위 `searchDt=YYYYMM`**(공고일 기준) 하나뿐 →
   기준일이 든 달부터 이번 달까지 받아 공고일(`tndrPblancDe`, 정수)로 거른다. **큰 응답은 HTTP 200 + 빈 본문**, **페이지 정렬이 불안정**(나눠 받으면
   같은 행이 두 페이지에 나오고 그만큼 다른 공고가 빠진다 — 2026-09-26 용역 142건 중 4건) → 한 페이지 1000건으로 전량, 빈 본문이면 50건씩 나누고 겹친 행 수를 errors로.
   JSON `items`는 0건이면 `""`, 1건이면 dict. 에러와 0건 구분 불가(`searchDt` 누락·미래 월도 00/0) — 요청 인자를 코드로 보장.
-  bid_no = `KWATER-{tndrPbanno}`. organization "한국수자원공사", end_date = `tndrPblancEnddt`(`-`는 없음), category = `cntrctDivNm`,
+  bid_no = `KWATER-{tndrPbanno}`. organization `""`(v1.6.0, 종전 "한국수자원공사" 상수), end_date = `tndrPblancEnddt`(`-`는 없음), category = `cntrctDivNm`,
   url = `ebid.kwater.or.kr/fz?bidno=`. 취소 공고는 API에서 빠진다. 범위 밖: 사전규격·발주계획(공고번호 없음)·입찰결과.
 - **수용 기준**:
   - [x] 공통 기준 전부
@@ -349,7 +381,7 @@
 
 ## 미결 질문
 - 공기업 API 5종(LH·한전·도로공사·수자원공사·방위사업청)이 필요한가 — BidWatch 수요 확인 후 판단(plan.md '이후 단계').
-- (원칙 ②) `status`를 어떻게 할지 — 제거(계약 major) / 출처가 명시한 값만(나라장터 `ntceKindNm` 취소→`cancelled`, K-Startup `rcrt_prgs_yn`) /
-  BidWatch가 `end_date`로 계산. 기본값 `ongoing`도 추정이다.
+- ~~(원칙 ②) `status`를 어떻게 할지~~ — **해소(2026-09-26 사용자, v1.6.0)**: 출처가 명시한 취소만 `cancelled`, ongoing/closed의 마감일 판정은 명시적 예외(편의 계산값). CONTRACT.md Phase 011 행.
+- (원칙 ②, 2026-09-26 spec-checker) `start_date`의 뜻이 출처마다 다르다(공고일·접수 시작일·최종낙찰일·체결일) — 필드를 나눌지(minor 추가)·출처별 공고일 원천으로 통일할지(값 변경). plan.md 보류.
 - ~~(원칙 ①) BidWatch가 지금 읽는 `extra` 키가 있는지~~ — **해소(2026-09-25 확인)**: bidwatch `frontend/src/components/notices/NoticeModal.tsx`의
   NaraExtra 12개·GeneralExtra 14개(K-Startup 8·기업마당 6) 영어 키를 읽는다. 확장 3메서드·보조금24·중소벤처 키는 읽는 곳 없음. 대응표는 plan.md Phase 006 4항.

@@ -10,7 +10,7 @@
 
 ## 시스템 개요
 - 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부·알리오, 자체조달 기관 LH·가스공사·국방 d2b·수자원공사)와 임의 HTML
-  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.5.0).
+  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.6.0).
   소비자는 BidWatch(`C:\Users\user\Documents\bidwatch`, editable 설치). 역할 경계: 외부 사이트에서 공고를 가져오는 것은
   전부 이 패키지 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은 BidWatch. 요구사항 상세는 `docs/REQUIREMENTS.md`.
 
@@ -180,11 +180,17 @@
   - 범위 밖: 첨부 파일 내려받기(url만 준다) · 수자원 목록 마감일을 상세 일정으로 채우기(수집 시점 정규화 — bidwatch 요청서 §4, 원칙 ②)
   - 완료 조건: REQUIREMENTS F-011~F-014 (v1.5.0) 기준 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
 
-- [ ] Phase 011: 원칙 ② 표준 필드 파생 제거 + d2b 공고 url을 상세 화면으로 (F-001~F-014 원칙 ②·F-013) — **버전은 변경안 확정 후(제거·타입 변경이 섞이면 major)**
+- [x] Phase 011: 원칙 ② 표준 필드 파생 제거 + d2b 공고 url을 상세 화면으로 (F-001~F-014 원칙 ②·F-013) — **표준 필드 값 변경(필드·타입·bid_no 불변) → minor 1.5.0 → 1.6.0**
+  (2026-09-27 — 로그 없음(버린 대안은 CONTRACT 행·커밋 메시지: K-Startup 서버 날짜 필터가 데이터에 안 먹어 only_ongoing 기본 True 유지 · d2b 국외 개찰일 1년 전 = 0건).
+  `a667b36`·`2f9e8c4`·`2d6f2d5`·`1da9170`·`d396be2`·마감 커밋 · handover `docs/handover/v1.6.0.md` — 마감 전체 634 passed(실호출 포함)·ruff 통과·tools_tests 196 passed /
+  변이 전부 잡힘(`scripts/_tmp/mutate_phase011.py` nara 13·general 12·inst 23·integ 1) / 마감 중 발견: LH API 업무 구분 `"null"`(127/127) → 조용한 첫 화면 url을 errors 보고로 / 실측: d2b 7일 684건 url 결측 0·상세 GET 36/36, 나라장터 7일 5,224건(취소 304·공사 배정예산 1,430) /
+  QA: qa-tester는 Write 도구가 없어 독립 대조 불가 → general-purpose 대행(원칙 qa-tester.md) 10개 수집기 필드 대조 전부 일치(보조금24 5건 불일치 → `d396be2`로 고쳐 재검증 합격)·
+  d2b url 678/678 파라미터 대조·GET 15/15·잘못된 키 마스킹 / spec-checker 지적 9건 반영(d2b budget 사용자 결정·K-Startup 비문자열 회귀·문서 5건, start_date 혼재는 보류) /
+  BidWatch `backend/tests` 137 passed(읽기·실행만))
   - 출처: ① 원칙 ② — REQUIREMENTS 공통 계약 원칙 ②·미결 질문(status) + bidwatch `docs/source_fields.md` 부록 A 남은 #2·#5·#6·#7·#8
     (**#6 공사 지역·#8 취소는 bidwatch가 이미 `extra` 원문으로 처리 중** — handover에 바뀐 값·조건을 적어 bidwatch 로직과 맞춘다, 2026-09-25 bidwatch 요청)
     ② bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_d2b_detail_url.md`(2026-09-26 — 팝업 바로가기가 d2b 첫 화면으로 열림). 발급 2026-09-26 사용자(둘을 한 Phase로).
-  - 트랙: **일반**(BidWatch가 받는 표준 필드 값이 바뀐다 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(태그 v1.5.0).
+  - 트랙: **일반**(BidWatch가 받는 표준 필드 값이 바뀐다 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(커밋 `e8472d7` v1.5.0 코드 — 태그는 v1.3.0까지).
     major가 섞이면 editable 설치라 커밋 즉시 bidwatch가 새 값을 받는다 → 구현은 브랜치, bidwatch 반영 시점에 main 병합(변경안 확정 때 결정).
   1. **조사(읽기만)** — bidwatch가 표준 필드를 어디서 읽고 무엇을 덮는지 영향표 · 이 패키지 전 수집기의 원칙 ② 위반 목록(Phase 009 기관 4종·알리오 포함) · d2b 상세 화면 주소 실측
   2. **변경안** — CONTRACT.md에 필드별 전후·버전 판정 + REQUIREMENTS 수용 기준 · 결정 필요 항목(status 처리 방식·기관 budget·region 원천 등)을 사용자에게
@@ -228,6 +234,9 @@
 
 ## 사용자 실테스트 대기
 
+- **v1.6.0 원칙 ② 값 변경·d2b url(bidwatch 세션 몫)** — `docs/handover/v1.6.0.md`. 발주기관 `""` 표시·지역 필터 결과 증가 결정·d2b 바로가기 5종+지명경쟁·
+  공사 예산=배정예산·interface.md 교체·`pip install -e`. 반영 확인은 그 문서 §5.
+
 - **v1.5.0 기관 수집기 4종 fetch_detail(bidwatch 세션 몫)** — `docs/handover/v1.5.0.md`. `pip install -e`·팝업 표시(금액 이름별·일정·담당자·첨부)·
   d2b 한도 공유·가스 표준 계약조건 첨부 구분·interface.md 교체. 반영 확인은 그 문서 §5.
 
@@ -261,6 +270,20 @@
   착수 시 주의: 설계 `docs/generic_scraper.md` §8-1은 2026-04 초안 — Phase 004~006 규칙(errors·절단 보고·항목 건너뜀·`extra` 원문 전부)이 없어 재스펙화 필요 /
   `ScraperConfig` 필드 추가 = 계약 게이트(minor) / 기존 HTML 모드 `bid_no` 형식 불변. 같은 문서의 후보 §8-2 `bid_no_regex`·§8-3 상세 페이지 스크래핑도 함께 보류.
   ("v1.2 JSON 모드"라는 옛 이름은 버린다 — 1.2.x는 다른 작업이 썼다.)
+
+- **(Phase 011, 2026-09-26) 작업 중 발견 — 범위 밖, 결정·조사 대기**:
+  - **start_date의 뜻이 출처마다 섞여 있다**(spec-checker) — 공고일(나라장터·알리오·기관)·접수 시작일(기업마당·K-Startup·중소벤처)·최종낙찰일(낙찰)·체결일(계약).
+    bidwatch는 start_date를 목록 정렬 1순위로 쓴다(영향표). 필드를 나눌지(minor 추가) · 출처별 공고일 원천으로 통일할지(값 변경, 일반 트랙) 결정 필요. REQUIREMENTS 미결 질문.
+  - **LH API 업무 구분이 `"null"`**(2026-09-27 14일 127/127건, 전날 52/52 값 있음) — v1.6.0에서 빈 값 + errors 보고로 드러나게 했다(url은 첫 화면).
+    며칠 뒤 다시 재서 계속이면 url을 다른 원천(검색 화면의 업무 코드 — 공고당 1회 추가 요청)으로 정할지 결정. `scripts/_tmp/p011_lh_null.py`
+  - d2b 국외경쟁 `pblancCanclAt`(표본 4건 전부 `N`) — 취소 표시인지 미확인. 같은 행 `pblancSe`로 취소를 판정하고 있어 급하지 않다.
+  - **K-Startup cutoff가 접수시작일 기준**(`kstartup.py` `_item_to_notice`) — 목록은 등록 순번(`pbanc_sn`) 내림차순인데 최근 등록 600건 중 접수시작일 ≥ 9/19는 2건뿐
+    (`scripts/_tmp/p011_kstartup_order.py`). 등록일 필드가 없어 "최근 N일에 올라온 공고"를 고를 수 없다 — days=1이면 거의 0건일 수 있다. BidWatch 정기 수집의 K-Startup
+    건수를 확인하고, 필요하면 `pbanc_sn` 증가분(직전 수집의 최대 번호 이후) 같은 다른 기준을 소비자와 정한다(계약 변경 가능성 — 일반 트랙).
+  - **d2b 목록 API 누락 의심** — researcher 실측: 사이트 첫 화면의 용역 `UMM0913`(건설사업관리용역, 공고일 2026-09-23)이 collect(days=7) 418건에 없다. 어느 목록 오퍼레이션에 있어야 하는지 미확인.
+  - **d2b 2차수 공고 fetch_detail "결과 없음"**(handover v1.5.0 §5 ② bidwatch 제보 `D2B-국내경쟁-2026LCH006737411-2`) — 상세 파라미터 확인 대기.
+  - 나라장터 낙찰 organization = 수요기관 `dminsttNm`, 입찰공고는 공고기관 `ntceInsttNm` — 같은 이름 칸에 다른 의미인지 미확인(낙찰 응답에 `ntceInsttNm`이 있는지부터).
+  - 조사 agent의 절차 이탈(Phase 011 d2b 실측): Write 도구가 없어 `python -` stdin 인라인 3회 — researcher 정의에 Write가 없다. 일회성 스크립트를 쓰는 조사면 도구 목록을 다시 볼 것.
 
 - **(approval-audit 2026-09-26, `8938593`) 다음 Phase 끝에 효과 확인** — 새 훅 `no_shell_file_write`·루트 `git -C` 쓰기 차단은 습관 교정이라
   이 세션에서 전후 비교가 안 됐다. 다음 `/approval-audit`에서 `python scripts/measure_wait.py --grep "cat >>"`·`--grep "git -C"`로 0건인지,

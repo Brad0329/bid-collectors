@@ -123,13 +123,22 @@ class LhCollector(BaseCollector):
 
         notices: list[Notice] = []
         skips: Counter[str] = Counter()
+        unknown_job: Counter[str] = Counter()
         for item in items:
             try:
-                notices.append(_item_to_notice(item))
+                notice = _item_to_notice(item)
             except Exception as e:
                 self._record_skip(skips, e, item)
+                continue
+            notices.append(notice)
+            if notice.url == LIST_URL:
+                unknown_job[(item.findtext("cstrtnJobGbNm") or "").strip() or "(빈 값)"] += 1
         if skip_msg := self._skip_message(skips):
             errors.append(skip_msg)
+        if unknown_job:
+            # 2026-09-27 실측: API가 업무 구분을 127건 전부 "null" 문자열로 줬다(전날엔 52/52 값 있음) — 조용히 첫 화면이 되지 않게 알린다
+            errors.append("[LH] 업무 구분을 몰라 상세 화면 대신 전자입찰 첫 화면으로 둔 공고 — "
+                          + ", ".join(f"{v!r} {n}건" for v, n in unknown_job.items()))
         return notices, pages, errors
 
     async def fetch_detail(self, bid_no: str) -> dict:
@@ -269,6 +278,8 @@ def _item_to_notice(item) -> Notice:
     require_fields(bidNum=bid_num, bidnmKor=title, tndrbidRegDt=start_str)
     end_str = parse_date(t("tndrdocAcptEndDtm"))  # 입찰서 접수 마감 "2026/09/21 10:00"
     job_type = t("cstrtnJobGbNm")
+    if job_type == "null":  # 출처의 빈 값 표시(문자열 "null") — 타입 통일로 빈 값. 원문은 extra에 그대로(2026-09-27 실측 127/127건)
+        job_type = ""
     url = detail_url(job_type, bid_num, t("bidDegree"))
     return Notice(
         source="LH",

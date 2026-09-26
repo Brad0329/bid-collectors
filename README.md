@@ -142,16 +142,19 @@ class Notice(BaseModel):
     organization: str    # 발주 기관명
     start_date: date | None
     end_date: date | None
-    status: str          # "ongoing" | "closed"
+    status: str          # "ongoing" | "closed" | "cancelled"(출처가 명시한 취소만, v1.6.0)
     url: str             # 상세 페이지 URL
     detail_url: str
-    content: str
-    budget: int | None   # 예산 (원)
+    content: str         # 절단 없음(v1.6.0)
+    budget: int | None   # 예산 (원) — 출처의 예산 필드 하나, 없으면 None
     region: str
     category: str
     attachments: list[dict] | None  # [{"name": "...", "url": "..."}, ...]
     extra: dict | None   # 응답 항목 원문 전부, 원래 이름(v1.2.5 — docs/interface.md §1)
 ```
+
+표준 필드는 출처가 준 값을 타입만 통일해 담는다 — 추정·대체·합성·절단·상수를 하지 않고, 출처에 없으면 빈 값이다(v1.6.0, 예외는
+`docs/interface.md` §1 필드 규칙). 추정가격·기관명·지역 같은 원문은 `extra`에 있다.
 
 ### CollectResult
 

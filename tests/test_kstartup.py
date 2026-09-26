@@ -157,6 +157,11 @@ class TestItemToNotice:
         notice = _item_to_notice(item, self._cutoff())
         assert notice.status == "closed"
 
+    def test_status_non_string_rcrt_prgs_yn_keeps_item(self):
+        """rcrt_prgs_yn이 list·dict여도 예외 없이 마감일 판정(v1.2.5 B — 선택 필드 이상으로 항목을 버리지 않는다)."""
+        for bad in (["Y"], {"v": "Y"}):
+            assert _item_to_notice({**SAMPLE_ITEM, "rcrt_prgs_yn": bad}, self._cutoff()).status == "ongoing"
+
     def test_status_missing_rcrt_prgs_yn_uses_end_date(self):
         """rcrt_prgs_yn 없음 → 마감일 판정(v1.6.0 — 종전 'closed' 상수). 픽스처 마감일은 미래 → ongoing, 과거 → closed."""
         item = {k: v for k, v in SAMPLE_ITEM.items() if k != "rcrt_prgs_yn"}

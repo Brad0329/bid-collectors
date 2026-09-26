@@ -326,7 +326,9 @@ def _item_to_notice(item, spec: ListSpec) -> Notice:
         status=determine_status(end_str, cancelled=cancelled),
         url=_detail_page_url(t, spec.kind) or SITE_URL,
         detail_url="",
-        budget=None,  # 기초예비가격·예산금액 등은 extra 원문(2026-09-26 사용자 — 이름별 표시는 BidWatch)
+        # 예산금액 budgetAmount 원문 한 필드(v1.6.0, 2026-09-26 사용자 — 수의 2종에만 있다, 실측 554/554). 경쟁 3종엔 예산 필드가 없어 None —
+        # 기초예비가격 bsicExpt·기초금액 baseAmnt는 예산이 아니라 대체하지 않는다(extra 원문)
+        budget=int(float(budget_raw)) if (budget_raw := t("budgetAmount")) else None,
         category=t("busiDivs"),
         extra=raw_fields(item),
     )

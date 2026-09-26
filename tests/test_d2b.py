@@ -91,7 +91,8 @@ class TestMapping:
         assert n.title == ITEMS[kind][SPEC[kind].title]
         assert n.source == "국방전자조달"
         assert n.category == ITEMS[kind]["busiDivs"]
-        assert n.budget is None
+        # v1.6.0 — 예산금액 budgetAmount만(국내수의 픽스처에만 있다), 기초예비가격·기초금액으로 대체하지 않는다
+        assert n.budget == (int(ITEMS[kind]["budgetAmount"]) if "budgetAmount" in ITEMS[kind] else None)
         assert n.end_date == date.today() + timedelta(days=END_DAYS[kind])  # 목록마다 다른 마감 필드
         assert n.extra == ITEMS[kind]  # 원문 전부, 이름 그대로
 

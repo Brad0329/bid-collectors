@@ -203,7 +203,7 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
 
     # 상태: 출처의 모집 진행 여부(rcrt_prgs_yn Y/N) 우선, 값이 없을 때만 마감일 판정(원칙 ②의 명시적 예외).
     # 종전엔 값이 없으면 "closed" 상수였다(v1.6.0)
-    prgs = item.get("rcrt_prgs_yn")
+    prgs = as_text(item.get("rcrt_prgs_yn"))  # 비문자열(list·dict)이어도 예외 없이 "값 없음"(v1.2.5 B)
     status = {"Y": "ongoing", "N": "closed"}.get(prgs) or determine_status(end_str)
 
     # str() 전에 검사한다 — str(None)은 "None"이라 빈 ID가 "KSTARTUP-None"으로 통과한다

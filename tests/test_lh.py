@@ -84,6 +84,18 @@ class TestFetch:
         assert params["tndrbidRegDtEnd"] == _d(0)
 
     @respx.mock
+    async def test_unknown_job_type_is_reported(self):
+        """2026-09-27 실측 — 업무 구분이 문자열 "null"(127/127건)이면 category ""·url 첫 화면이고, 그 사실과 건수를 errors에(조용히 넘기지 않는다)."""
+        items = [_item_xml("1", job="null"), _item_xml("2", job="null"), _item_xml("3")]
+        respx.get(API_URL).mock(return_value=httpx.Response(200, content=_body(items)))
+        result = await LhCollector(api_key="k").collect(days=7)
+        assert len(result.notices) == 3
+        assert [n.category for n in result.notices] == ["", "", "시설공사"]
+        assert [n.url == "https://ebid.lh.or.kr/" for n in result.notices] == [True, True, False]
+        assert result.notices[0].extra["cstrtnJobGbNm"] == "null"  # 원문은 그대로
+        assert len(result.errors) == 1 and "'null' 2건" in result.errors[0]
+
+    @respx.mock
     async def test_euc_kr_response(self):
         respx.get(API_URL).mock(return_value=httpx.Response(200, content=_body([_item_xml(title="한글 제목 공사")])))
         result = await LhCollector(api_key="k").collect(days=7)

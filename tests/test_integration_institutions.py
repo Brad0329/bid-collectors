@@ -5,8 +5,10 @@
 호출: 수집 LH 1·가스 1·d2b 5·수자원 4~8 + 원문 대조 4 + health 4.
 """
 
+import html
 import json
 import os
+import re
 from datetime import datetime, timedelta
 
 import httpx
@@ -60,7 +62,14 @@ def _assert_extra_matches(notices, raw: dict[str, set[str]], key_of) -> None:
 
 async def test_lh_real():
     result = await LhCollector().collect(days=7)
-    _assert_clean(result)
+    # 2026-09-27부터 API가 업무 구분을 "null"로 준다 — 그때 나오는 "첫 화면으로 둔 공고" 보고만 허용하고, 그 건수가 실제 첫 화면 url 수와 같은지 잰다
+    first_screen = sum(n.url == lh.LIST_URL for n in result.notices)
+    job_errors = [e for e in result.errors if e.startswith("[LH] 업무 구분을 몰라")]
+    assert [e for e in result.errors if e not in job_errors] == [], f"수집 에러: {result.errors}"
+    assert bool(job_errors) == bool(first_screen)
+    if job_errors:
+        assert sum(int(n) for n in re.findall(r"(\d+)건", job_errors[0])) == first_screen
+    assert len(result.notices) >= 1 and result.total_fetched == result.total_after_dedup
     raw = _xml_raw(await _get(lh.API_URL, {"tndrbidRegDtStart": _ymd(7), "tndrbidRegDtEnd": _ymd(0),
                                            "numOfRows": "1000", "pageNo": "1"}),
                    key=lambda it: it.findtext("bidNum").strip())
@@ -89,6 +98,21 @@ async def test_d2b_real():
                    key=lambda it: f"D2B-국내경쟁-{it.findtext('g2bPblancNo').strip()}-{it.findtext('pblancOdr').strip()}")
     _assert_extra_matches(result.notices, raw, lambda n: n.bid_no)
     assert (await D2bCollector().health_check())["status"] == "ok"
+    # v1.6.0 url: 첫 화면인 공고 0(주소 결측은 errors로 오므로 _assert_clean이 잡는다) + 구분별 1건을 쿠키 없는 새 세션으로 열어
+    # 본문에 건명이 있는지(200만으로는 안 된다 — 틀린 파라미터도 200 + 빈 화면이 온다). 사이트 GET 최대 5회
+    assert all(n.url != d2b.SITE_URL for n in result.notices)
+    ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0 Safari/537.36"}  # 기본 UA는 400
+    opened = {}
+    for n in result.notices:
+        kind = n.bid_no.split("-")[1]
+        if kind in opened or "View.do" not in n.url:
+            continue
+        async with httpx.AsyncClient(timeout=30.0, headers=ua) as client:
+            page = await client.get(n.url)
+        opened[kind] = page.status_code == 200 and "".join(n.title.split()) in "".join(html.unescape(page.text).split())
+    # 늘 있는 3종(위 kinds 단언과 같다)은 반드시 열어 본다 — 국외·시설경쟁은 7일에 없을 수 있어 있으면 연다
+    assert {"국내경쟁", "국내수의", "시설수의"} <= set(opened), f"열어 본 구분: {sorted(opened)}"
+    assert all(opened.values()), f"상세 화면이 건명을 보여 주지 않음: {opened}"
 
 
 async def test_kwater_real():
@@ -145,9 +169,14 @@ async def test_lh_fetch_detail_real():
     degree = n.extra["bidDegree"]
     assert d["공고일반정보/입찰공고번호"] == f"{bid_num} - {degree}"  # 목록 API의 최신 차수와 같은 화면
     assert d["공고일반정보/입찰공고건명"]
-    cmd = lh._JOB_CMD[{"시설공사": "10", "용역": "20", "물품": "30", "지급자재": "40"}[n.category]]
-    async with httpx.AsyncClient(timeout=30.0, verify=lh.lh_ssl_context()) as client:  # 원문 독립 호출 — 첨부 링크를 따로 센다
-        html = (await client.get(f"{lh.SITE}ebid.et.tp.cmd.{cmd}.dev", params={"bidNum": bid_num, "bidDegree": degree})).text
+    # 원문 독립 호출 — 첨부 링크를 따로 센다. 업무 경로는 목록 category로 고르되, 그게 비면(2026-09-27부터 "null") 4경로 중 이 공고번호 화면을 연다
+    jobs = {"시설공사": "10", "용역": "20", "물품": "30", "지급자재": "40"}
+    cmds = [lh._JOB_CMD[jobs[n.category]]] if n.category in jobs else list(lh._JOB_CMD.values())
+    async with httpx.AsyncClient(timeout=30.0, verify=lh.lh_ssl_context()) as client:
+        for cmd in cmds:
+            html = (await client.get(f"{lh.SITE}ebid.et.tp.cmd.{cmd}.dev", params={"bidNum": bid_num, "bidDegree": degree})).text
+            if d["공고일반정보/입찰공고건명"][:10] in html:
+                break
     assert len(d["attachments"]) == html.count("fn_dds_open('") >= 1
 
 

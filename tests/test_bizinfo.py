@@ -168,7 +168,8 @@ class TestItemToNotice:
         assert notice.source == "기업마당"
         assert notice.title == "[경기] 테스트 지원사업 공고"
         assert notice.organization == "테스트진흥원"
-        assert notice.region == "경기도"
+        assert notice.region == ""  # v1.6.0 원칙 ② — jrsdInsttNm은 소관기관이지 지역이 아니다(extra 원문)
+        assert notice.extra["jrsdInsttNm"] == "경기도"
         assert notice.category == "수출"
 
     def test_bid_no_format(self):
@@ -195,6 +196,11 @@ class TestItemToNotice:
         assert str(notice.start_date) == START
         assert notice.end_date is not None
         assert str(notice.end_date) == END
+
+    def test_single_date_period_is_not_start_date(self):
+        """v1.6.0 — 기간이 아닌 날짜 하나는 시작인지 마감인지 모른다 → start·end 둘 다 None(종전엔 start_date)."""
+        notice = _item_to_notice({**SAMPLE_ITEM, "reqstBeginEndDe": END}, self._cutoff())
+        assert (notice.start_date, notice.end_date) == (None, None)
 
     def test_attachments_included(self):
         """첨부파일이 Notice에 포함."""

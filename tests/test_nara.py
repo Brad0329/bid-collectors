@@ -165,7 +165,8 @@ class TestItemToNotice:
         assert notice.source == "나라장터"
         assert notice.title == "테스트 용역 입찰공고"
         assert notice.organization == "테스트기관"
-        assert notice.region == "서울"
+        assert notice.region == ""  # v1.6.0 원칙 ② — 용역엔 지역 필드가 없다(수요기관명 dminsttNm은 extra)
+        assert notice.extra["dminsttNm"] == "서울"
 
     def test_bid_no_format(self):
         """bid_no는 '{bid_type}-{bidNtceNo}-{bidNtceOrd}' 형식."""
@@ -190,8 +191,7 @@ class TestItemToNotice:
     def test_budget_and_est_price(self):
         item = self._make_item()
         notice = _item_to_notice(item, "용역")
-        # budget = asignBdgtAmt (60000000), est_price = presmptPrce (50000000)
-        # notice.budget = budget or est_price → 60000000
+        # budget = 배정예산 asignBdgtAmt만(v1.6.0). 추정가격 presmptPrce는 extra 원문
         assert notice.budget == 60000000
         # 원문 extra(v1.2.5): 태그 이름 그대로, 값은 텍스트
         assert notice.extra["asignBdgtAmt"] == "60000000"
@@ -206,11 +206,18 @@ class TestItemToNotice:
         assert notice.attachments[0]["url"] == "https://example.com/file1.pdf"
         assert notice.attachments[1] == {"name": "규격서2", "url": "https://example.com/file2.hwp"}  # 파일명 없으면 규격서{i}
 
-    def test_category_combined(self):
-        """용역: 공공조달분류 대 > 중 (태그는 2026-09-24 실제 용역 목록 응답 기준)."""
+    def test_category_service_is_large_class_only(self):
+        """용역: 공공조달분류 대분류 한 필드(v1.6.0 원칙 ② — 종전 "대 > 중" 합성). 중분류는 extra 원문."""
         item = self._make_item()
         notice = _item_to_notice(item, "용역")
-        assert notice.category == "ICT 서비스 > ICT사업 컨설팅"
+        assert notice.category == "ICT 서비스"
+        assert notice.extra["pubPrcrmntMidClsfcNm"] == "ICT사업 컨설팅"
+
+    def test_category_no_fallback_to_other_class(self):
+        """대분류가 없으면 중분류·세부품명으로 대체하지 않는다 → 빈 값."""
+        xml = ("<item><bidNtceNo>3</bidNtceNo><bidNtceNm>t</bidNtceNm>"
+               "<pubPrcrmntMidClsfcNm>중분류</pubPrcrmntMidClsfcNm><dtilPrdctClsfcNoNm>세부품명</dtilPrdctClsfcNoNm></item>")
+        assert _item_to_notice(etree.fromstring(xml), "용역").category == ""
 
     def test_category_goods_uses_detail_product_name(self):
         """물품: 세부품명(dtilPrdctClsfcNoNm) — 실제 물품 목록 응답의 태그."""
@@ -253,6 +260,32 @@ class TestItemToNotice:
         assert notice.title == "최소공고"
         assert notice.attachments is None
         assert notice.budget is None
+
+    # --- v1.6.0 원칙 ② — 표준 필드는 원문 한 필드, 대체·추정 없음 ---
+    def test_budget_not_replaced_by_estimated_price(self):
+        """배정예산이 없으면 추정가격으로 대체하지 않는다 → None(추정가격은 extra)."""
+        xml = ("<item><bidNtceNo>4</bidNtceNo><bidNtceNm>t</bidNtceNm>"
+               "<presmptPrce>50000000</presmptPrce></item>")
+        n = _item_to_notice(etree.fromstring(xml), "용역")
+        assert n.budget is None
+        assert n.extra["presmptPrce"] == "50000000"
+
+    def test_construction_budget_is_bdgtAmt_and_region_is_site(self):
+        """공사: 배정예산 태그 bdgtAmt(추정가격 아님), 지역 = 공사현장지역 cnstrtsiteRgnNm(수요기관명 아님)."""
+        xml = ("<item><bidNtceNo>5</bidNtceNo><bidNtceNm>t</bidNtceNm><bdgtAmt>70000000</bdgtAmt>"
+               "<presmptPrce>63636364</presmptPrce><cnstrtsiteRgnNm>경기도 수원시</cnstrtsiteRgnNm>"
+               "<dminsttNm>수요기관</dminsttNm></item>")
+        n = _item_to_notice(etree.fromstring(xml), "공사")
+        assert n.budget == 70000000
+        assert n.region == "경기도 수원시"
+
+    def test_cancel_notice_is_cancelled(self):
+        """출처가 명시한 취소(ntceKindNm=취소공고) → cancelled, 마감일이 미래여도."""
+        xml = ("<item><bidNtceNo>6</bidNtceNo><bidNtceNm>t</bidNtceNm><ntceKindNm>취소공고</ntceKindNm>"
+               "<bidClseDt>2099-12-31 10:00:00</bidClseDt></item>")
+        assert _item_to_notice(etree.fromstring(xml), "용역").status == "cancelled"
+        normal = xml.replace("취소공고", "등록공고")
+        assert _item_to_notice(etree.fromstring(normal), "용역").status == "ongoing"
 
     def test_dates_parsed(self):
         item = self._make_item()
@@ -494,6 +527,9 @@ class TestNaraExtended:
         n = notices[0]
         assert n.bid_no == "낙찰-물품-R26BK0001-000"
         assert n.status == "closed"
+        assert n.budget is None  # v1.6.0 — 낙찰금액은 예산이 아니다(extra 원문)
+        assert n.extra["sucsfbidAmt"] == "12345000"
+        assert str(n.start_date) == "2026-09-01"
         assert n.extra["bidwinnrNm"] == "낙찰업체"  # v1.2.5 원문 extra — 태그 이름 그대로
         assert n.extra["sucsfbidRate"] == "87.5"
         assert n.extra["prtcptCnum"] == "7"
@@ -512,6 +548,27 @@ class TestNaraExtended:
         assert notices[0].bid_no == "계약-공사-C26000111"
         assert notices[0].title == "계약 테스트"
         assert notices[0].budget == 5000000
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_extended_no_fallbacks(self):
+        """v1.6.0 원칙 ② — 낙찰 시작일은 최종낙찰일만(실개찰일 폴백 없음) / 계약 금액은 금차만(총계약 폴백 없음),
+        end_date 없음(계약기간은 마감일이 아니다), region 없음(관할 구분은 지역이 아니다)."""
+        from bid_collectors.nara import AWARD_BASE_URL, AWARD_SERVICES, CONTRACT_BASE_URL, CONTRACT_SERVICES
+
+        award = "<item><bidNtceNo>A1</bidNtceNo><bidNtceNm>n</bidNtceNm><rlOpengDt>2026-09-01 10:00:00</rlOpengDt></item>"
+        contract = ("<item><dcsnCntrctNo>C1</dcsnCntrctNo><cntrctNm>n</cntrctNm><totCntrctAmt>900</totCntrctAmt>"
+                    "<cntrctPrd>2026-09-01 ~ 2026-12-31</cntrctPrd><cntrctInsttJrsdctnDivNm>국가기관</cntrctInsttJrsdctnDivNm></item>")
+        respx.get(f"{AWARD_BASE_URL}/{AWARD_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(award)))
+        respx.get(f"{CONTRACT_BASE_URL}/{CONTRACT_SERVICES['용역']}").mock(
+            return_value=httpx.Response(200, content=_make_xml_response(contract)))
+        c = NaraCollector(api_key="test-key")
+        a = (await c.collect_awards(days=1, bid_types=["용역"]))[0]
+        k = (await c.collect_contracts(days=1, bid_types=["용역"]))[0]
+        assert a.start_date is None
+        assert (k.budget, k.end_date, k.region) == (None, None, "")
+        assert k.extra["cntrctPrd"] == "2026-09-01 ~ 2026-12-31"
 
     @pytest.mark.asyncio
     @respx.mock

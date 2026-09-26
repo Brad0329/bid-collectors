@@ -41,3 +41,10 @@ class TestDetermineStatusEdgeCases:
     def test_custom_format(self):
         future = (date.today() + timedelta(days=10)).strftime("%d/%m/%Y")
         assert determine_status(future, date_format="%d/%m/%Y") == "ongoing"
+
+    def test_cancelled_wins_over_dates(self):
+        """v1.6.0 — 출처가 명시한 취소는 마감일(미래·과거·없음)과 무관하게 cancelled."""
+        future = (date.today() + timedelta(days=10)).isoformat()
+        past = (date.today() - timedelta(days=10)).isoformat()
+        assert [determine_status(d, cancelled=True) for d in (future, past, None)] == ["cancelled"] * 3
+        assert determine_status(future, cancelled=False) == "ongoing"

@@ -126,12 +126,12 @@ class TestItemToNotice:
         assert "<p>" not in notice.content
         assert "창업 지원 내용" in notice.content
 
-    def test_content_truncated_to_500(self):
-        """content는 500자로 절단."""
+    def test_content_not_truncated(self):
+        """v1.6.0 원칙 ② — content 절단 없음(종전 500자). 1000자 → 1000자."""
         long_content = "가" * 1000
         item = {**SAMPLE_ITEM, "pbanc_ctnt": long_content}
         notice = _item_to_notice(item, self._cutoff())
-        assert len(notice.content) <= 500
+        assert len(notice.content) == 1000
 
     def test_cutoff_filtering_old_item_returns_none(self):
         """cutoff 이전 항목 → None."""
@@ -157,11 +157,12 @@ class TestItemToNotice:
         notice = _item_to_notice(item, self._cutoff())
         assert notice.status == "closed"
 
-    def test_status_missing_rcrt_prgs_yn(self):
-        """rcrt_prgs_yn 없음 → status 'closed'."""
+    def test_status_missing_rcrt_prgs_yn_uses_end_date(self):
+        """rcrt_prgs_yn 없음 → 마감일 판정(v1.6.0 — 종전 'closed' 상수). 픽스처 마감일은 미래 → ongoing, 과거 → closed."""
         item = {k: v for k, v in SAMPLE_ITEM.items() if k != "rcrt_prgs_yn"}
-        notice = _item_to_notice(item, self._cutoff())
-        assert notice.status == "closed"
+        assert _item_to_notice(item, self._cutoff()).status == "ongoing"
+        past = (datetime.now() - timedelta(days=3)).strftime("%Y%m%d")
+        assert _item_to_notice({**item, "pbanc_rcpt_end_dt": past}, self._cutoff()).status == "closed"
 
     def test_extra_fields(self):
         """v1.2.5 원칙 ①: extra는 응답 키 전부·원래 이름(영어 별칭 없음), 값 타입 그대로."""
@@ -187,7 +188,7 @@ class TestItemToNotice:
         assert notice is not None
         assert notice.bid_no == "KSTARTUP-99999"
         assert notice.title == "최소 공고"
-        assert notice.organization == "창업진흥원"  # default fallback
+        assert notice.organization == ""  # v1.6.0 — 종전 "창업진흥원" 상수 폴백 없음
         assert notice.url == ""
 
     def test_minimal_item_extra_is_raw_fields(self):
@@ -200,13 +201,14 @@ class TestItemToNotice:
         notice = _item_to_notice(item, self._cutoff())
         assert notice.extra == item
 
-    def test_organization_fallback_to_sprv_inst(self):
-        """pbanc_ntrp_nm 없으면 sprv_inst에서 가져옴."""
+    def test_organization_no_fallback_to_sprv_inst(self):
+        """v1.6.0 원칙 ② — pbanc_ntrp_nm 없으면 빈 값. sprv_inst는 기관 유형("민간" 등)이라 대체하지 않는다(extra 원문)."""
         item = {**SAMPLE_ITEM}
         del item["pbanc_ntrp_nm"]
-        item["sprv_inst"] = "과학기술부"
+        item["sprv_inst"] = "민간"
         notice = _item_to_notice(item, self._cutoff())
-        assert notice.organization == "과학기술부"
+        assert notice.organization == ""
+        assert notice.extra["sprv_inst"] == "민간"
 
     def test_empty_start_date_not_filtered(self):
         """pbanc_rcpt_bgng_dt 비어있으면 cutoff 필터링하지 않음."""

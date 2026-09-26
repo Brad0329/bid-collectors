@@ -120,12 +120,11 @@ class TestItemToNotice:
         notice = _item_to_notice(item)
         assert notice.url == "https://www.gov.kr/portal/rcvfvrSvc/dtlEx/SVC000001"
 
-    def test_content_from_summary_and_support(self):
-        """content는 서비스목적요약 + 지원내용(HTML 제거) 합성."""
+    def test_content_is_summary_only(self):
+        """v1.6.0 원칙 ② — content = 서비스목적요약 한 필드(종전 + 지원내용 합성). 지원내용은 extra 원문."""
         notice = _item_to_notice(SAMPLE_ITEM)
-        assert "중소기업 수출 역량 강화" in notice.content
-        assert "수출 컨설팅 및 지원금 제공" in notice.content
-        assert "<p>" not in notice.content
+        assert notice.content == SAMPLE_ITEM["서비스목적요약"]
+        assert notice.extra["지원내용"] == SAMPLE_ITEM["지원내용"]
 
     def test_content_only_summary(self):
         """지원내용 없으면 서비스목적요약만."""
@@ -134,11 +133,16 @@ class TestItemToNotice:
         assert "중소기업 수출 역량 강화" in notice.content
         assert "수출 컨설팅" not in notice.content
 
-    def test_content_only_support(self):
-        """서비스목적요약 없으면 지원내용만."""
+    def test_content_no_fallback_to_support(self):
+        """서비스목적요약이 없으면 빈 값 — 지원내용으로 대체하지 않는다(v1.6.0)."""
         item = {**SAMPLE_ITEM, "서비스목적요약": ""}
         notice = _item_to_notice(item)
-        assert "수출 컨설팅 및 지원금 제공" in notice.content
+        assert notice.content == ""
+
+    def test_end_date_is_period_end(self):
+        """v1.6.0 — 신청기한이 기간이면 끝 날짜가 마감일(종전엔 시작일, 부록 A-2)."""
+        notice = _item_to_notice({**SAMPLE_ITEM, "신청기한": f"2026.01.01 ~ {DEADLINE}"})
+        assert str(notice.end_date) == DEADLINE
 
     def test_end_date_from_deadline(self):
         """신청기한에서 end_date 파싱."""

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
-from .utils.dates import parse_date
+from .utils.dates import split_period
 from .utils.http import create_client
 from .utils.status import determine_status
 from .utils.text import as_text, clean_html_to_text
@@ -156,13 +156,9 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
 
     # 신청기간 파싱 — 선택 필드가 null이어도 항목을 버리지 않는다(v1.2.5 B: 종전엔 `"~" in None`으로 TypeError)
     req_period = as_text(item.get("reqstBeginEndDe"))
-    start_str = parse_date(req_period)
-    # reqstBeginEndDe에서 종료일 추출 시도 (기간 형식: "2024-03-01 ~ 2024-04-05")
-    end_str = None
-    if "~" in req_period:
-        parts = req_period.split("~")
-        if len(parts) == 2:
-            end_str = parse_date(parts[1].strip())
+    # 기간 형식 "2024-03-01 ~ 2024-04-05"만 시작·끝으로 나눈다. 날짜 하나뿐인 값은 시작인지 마감인지 알 수 없어
+    # 어느 칸에도 넣지 않는다(v1.6.0 — 종전엔 시작일로 넣었다. 원문은 extra)
+    start_str, end_str = split_period(req_period) or (None, None)
 
     status = determine_status(end_str) if end_str else "ongoing"
 
@@ -179,7 +175,7 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
         url=url,
         detail_url=url,
         content=content,
-        region=as_text(item.get("jrsdInsttNm")),
+        region="",  # 응답에 지역 필드가 없다 — 종전 jrsdInsttNm은 소관기관(부처명)이었다(v1.6.0, extra 원문)
         category=as_text(item.get("pldirSportRealmLclasCodeNm")),
         attachments=_parse_attachments(item),
         extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 해시태그·대상·담당자 등은 응답 키 그대로

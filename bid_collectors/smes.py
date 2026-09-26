@@ -161,16 +161,16 @@ def _item_to_notice(item: etree._Element) -> Notice:
         source="중소벤처기업부",
         bid_no=f"MSS-{item_id}",
         title=title,
-        organization="중소벤처기업부",
+        organization="",  # 응답에 기관 필드가 없다 — 종전 "중소벤처기업부" 상수(v1.6.0 원칙 ②, 출처 이름은 source에 있다)
         start_date=start_str or None,
         end_date=end_str or None,
         status=status,
         url=view_url,
         detail_url=view_url,
-        content=content[:500] if content else "",
+        content=content,  # 절단 없음(v1.6.0 — 종전 500자)
         # 예산 없음 — 응답에 지원 규모 태그가 없다(명세 swagger 11키·실측 88건). 종전 suptScale 손 매핑은 없는 태그라 항상 None이었다(v1.3.1)
         budget=None,
-        category=t("writerPosition"),
+        category="",  # 분류 필드가 없다 — 종전 writerPosition은 작성 부서(예 "수출지원과")였다(v1.6.0, extra 원문)
         attachments=attachments,
         extra=raw_fields(item),  # 원문 전부(v1.2.5, 원칙 ①) — 반복 태그 fileName·fileUrl은 list
     )

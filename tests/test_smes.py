@@ -107,8 +107,10 @@ class TestItemToNotice:
 
         assert notice.source == "중소벤처기업부"
         assert notice.title == "2026년 중소기업 수출지원사업 공고"
-        assert notice.organization == "중소벤처기업부"
-        assert notice.category == "수출지원과"
+        # v1.6.0 원칙 ② — 기관 필드가 없어 빈 값(종전 상수), writerPosition은 작성 부서라 분류가 아니다(extra 원문)
+        assert notice.organization == ""
+        assert notice.category == ""
+        assert notice.extra["writerPosition"] == "수출지원과"
         assert notice.url == "https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=126&bcIdx=1234"
         assert notice.detail_url == notice.url
 
@@ -133,8 +135,8 @@ class TestItemToNotice:
         assert "<p>" not in notice.content
         assert "중소기업 수출 지원 내용" in notice.content
 
-    def test_content_truncation_500_chars(self):
-        """content는 500자 이내로 truncate."""
+    def test_content_not_truncated(self):
+        """v1.6.0 원칙 ② — content 절단 없음(종전 500자). 1000자 → 1000자."""
         long_content = "A" * 1000
         xml = f"""\
 <item>
@@ -145,7 +147,7 @@ class TestItemToNotice:
 </item>"""
         item = etree.fromstring(xml)
         notice = _item_to_notice(item)
-        assert len(notice.content) <= 500
+        assert len(notice.content) == 1000
 
     def test_budget_always_none(self):
         """응답에 지원 규모 태그가 없다(명세 11키·실측 88건) — budget은 항상 None(v1.3.1 손 매핑 삭제)."""

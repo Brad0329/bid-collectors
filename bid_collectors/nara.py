@@ -19,7 +19,7 @@ from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
-from .utils.status import determine_status
+from .utils.status import CANCEL_KIND, determine_status
 
 logger = logging.getLogger("bid_collectors")
 
@@ -31,6 +31,8 @@ BID_SERVICES = {
     "물품": "getBidPblancListInfoThngPPSSrch",
     "공사": "getBidPblancListInfoCnstwkPPSSrch",
 }
+# 입찰공고 category 원문 태그(업무별 한 필드 — 아래 _item_to_notice 주석)
+CATEGORY_TAGS = {"용역": "pubPrcrmntLrgClsfcNm", "물품": "dtilPrdctClsfcNoNm", "공사": "mainCnsttyNm"}
 
 # 낙찰정보 서비스
 AWARD_BASE_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService"
@@ -108,13 +110,12 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
 
     start_str = parse_date(t("bidNtceDt")) or ""
     end_str = parse_date(t("bidClseDt")) or ""
-    status = determine_status(end_str)
+    status = determine_status(end_str, cancelled=t("ntceKindNm") == CANCEL_KIND)
 
-    # 예산/추정가격 파싱
-    budget_raw = t("asignBdgtAmt")
-    est_price_raw = t("presmptPrce")
+    # 예산 = 배정예산 원문 한 필드(v1.6.0, 원칙 ②). 태그가 업무마다 다르다 — 용역·물품 asignBdgtAmt, 공사 bdgtAmt.
+    # 종전엔 없으면 추정가격(presmptPrce)으로 대체했다 — 추정가격은 extra 원문에 있다
+    budget_raw = t("bdgtAmt" if bid_type == "공사" else "asignBdgtAmt")
     budget = int(float(budget_raw)) if budget_raw else None
-    est_price = int(float(est_price_raw)) if est_price_raw else None
 
     # 첨부파일: 공고규격서. 종전의 공고첨부 bidNtceFlNm/Url{i} 루프는 명세·실측(용역/물품/공사 1310/1108/942건)에 없는 태그라 삭제(v1.3.1).
     # 그 밖의 첨부(e발주 등)는 목록 응답에 없고 별도 오퍼레이션(getBidPblancListInfoEorderAtchFileInfo)에만 있다
@@ -125,16 +126,10 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
             fname = t(f"ntceSpecFileNm{i}") or f"규격서{i}"
             attachments.append({"name": fname, "url": furl})
 
-    # 카테고리: 업무구분마다 분류 태그가 다르다 (2026-09-24 실측, 구분별 목록 첫 100건)
-    #   용역 = 공공조달분류 대 > 중 (100%) / 물품 = 세부품명 dtilPrdctClsfcNoNm (100%)
-    #   공사 = 주공종 mainCnsttyNm (26% — 나머지는 빈값)
-    # 종전 prdctClsfcNoNm·dtlPrdctClsfcNoNm은 목록 응답에 없는 태그라 물품 분류가 전부 빈값이었다.
-    procure_large = t("pubPrcrmntLrgClsfcNm")
-    procure_mid = t("pubPrcrmntMidClsfcNm")
-    if procure_large and procure_mid:
-        category = f"{procure_large} > {procure_mid}"
-    else:
-        category = procure_large or procure_mid or t("dtilPrdctClsfcNoNm") or t("mainCnsttyNm")
+    # 카테고리: 업무구분마다 분류 태그가 다르다 (2026-09-24 실측, 구분별 목록 첫 100건) — 원문 한 필드(v1.6.0, 원칙 ②)
+    #   용역 = 공공조달분류 대분류 pubPrcrmntLrgClsfcNm (100%, 중분류는 extra) / 물품 = 세부품명 dtilPrdctClsfcNoNm (100%)
+    #   공사 = 주공종 mainCnsttyNm (26% — 나머지는 빈값). 종전엔 "대 > 중" 합성과 다른 분류로의 폴백이 있었다.
+    category = t(CATEGORY_TAGS[bid_type]) if bid_type in CATEGORY_TAGS else ""
 
     # URL: API 제공 URL 우선, 없으면 폴백
     fallback_url = f"https://www.g2b.go.kr:8081/ep/invitation/publish/bidInfoDtl.do?bidno={bid_no_raw}&bidseq={bid_no_ver}"
@@ -151,8 +146,9 @@ def _item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         url=url,
         detail_url=url,
         content="",
-        budget=budget if budget is not None else est_price,
-        region=t("dminsttNm"),
+        budget=budget,
+        # 지역 = 공사현장지역(원문 지역 필드). 용역·물품엔 지역 필드가 없다 — 종전 수요기관명(dminsttNm)은 지역이 아니었다(v1.6.0)
+        region=t("cnstrtsiteRgnNm") if bid_type == "공사" else "",
         category=category,
         attachments=attachments or None,
         # 원문 전부(v1.2.5, 원칙 ①) — 입찰방식·낙찰방법·담당자·평가비율 등은 응답 태그 이름 그대로 extra에 있다.
@@ -173,9 +169,8 @@ def _award_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     bid_no_ver = t("bidNtceOrd")
     full_bid_no = f"{bid_no_raw}-{bid_no_ver}" if bid_no_ver else bid_no_raw
 
-    sucsf_date = parse_date(t("fnlSucsfDate")) or parse_date(t("rlOpengDt")) or ""
-    sucsf_amt = t("sucsfbidAmt")
-    budget = int(float(sucsf_amt)) if sucsf_amt else None
+    # 최종낙찰일만(v1.6.0 — 종전 실개찰일 rlOpengDt 폴백 제거). 낙찰금액 sucsfbidAmt는 예산이 아니라 budget에 넣지 않는다(extra 원문)
+    sucsf_date = parse_date(t("fnlSucsfDate")) or ""
 
     url = f"https://www.g2b.go.kr:8081/ep/invitation/publish/bidInfoDtl.do?bidno={bid_no_raw}&bidseq={bid_no_ver}"
 
@@ -186,10 +181,10 @@ def _award_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         organization=t("dminsttNm"),
         start_date=sucsf_date or None,
         end_date=None,
-        status="closed",
+        status="closed",  # 낙찰 = 끝난 입찰 — 원칙 ②의 명시적 예외(편의 계산값, CONTRACT 2026-09-26)
         url=url,
         detail_url=url,
-        budget=budget,
+        budget=None,
         extra=raw_fields(item),  # 원문 전부(v1.2.5) — 낙찰자·낙찰률·참가자 수는 응답 태그 이름 그대로
     )
 
@@ -207,9 +202,10 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
     title = t("cntrctNm") or t("cnstwkNm")
     require_fields(cntrctNo=cntrct_no, cntrctNm=title)  # 빈 ID는 `계약-용역-`로 합쳐진다(v1.2.5 A)
     cntrct_date = parse_date(t("cntrctCnclsDate")) or ""
-    cntrct_end = parse_date(t("cntrctPrd")) or ""
+    # end_date 없음(v1.6.0) — 종전 cntrctPrd(계약기간)는 마감일이 아니고, 기간 문자열의 시작일이 들어갔다(부록 A-2). 원문은 extra
 
-    amt_raw = t("thtmCntrctAmt") or t("totCntrctAmt")
+    # 금차 계약금액 원문 한 필드(v1.6.0 — 종전 총계약금액 totCntrctAmt 폴백 제거, extra 원문)
+    amt_raw = t("thtmCntrctAmt")
     budget = int(float(amt_raw)) if amt_raw else None
 
     detail_url = t("cntrctDtlInfoUrl") or "http://www.g2b.go.kr"
@@ -220,12 +216,12 @@ def _contract_item_to_notice(item: etree._Element, bid_type: str) -> Notice:
         title=title,
         organization=t("cntrctInsttNm"),
         start_date=cntrct_date or None,
-        end_date=cntrct_end or None,
-        status=determine_status(cntrct_end),
+        end_date=None,
+        status=determine_status(None),
         url=detail_url,
         detail_url=detail_url,
         budget=budget,
-        region=t("cntrctInsttJrsdctnDivNm"),
+        region="",  # 종전 cntrctInsttJrsdctnDivNm은 기관 관할 구분(국가기관 등)이라 지역이 아니다(v1.6.0)
         extra=raw_fields(item),  # 원문 전부(v1.2.5)
     )
 

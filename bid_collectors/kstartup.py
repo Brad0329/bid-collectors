@@ -14,6 +14,7 @@ from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
 from .utils.dates import parse_date
 from .utils.http import create_client
+from .utils.status import determine_status
 from .utils.text import as_text, clean_html, clean_html_to_text
 
 logger = logging.getLogger("bid_collectors")
@@ -28,6 +29,8 @@ class KstartupCollector(BaseCollector):
     source_name = "K-Startup"
 
     async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
+        # 기본 True = 원칙 ②의 명시적 예외(2026-09-26 사용자): 등록일 필드가 없고, 서버 날짜 필터(cond[...::GTE])는
+        # matchCount에만 먹고 데이터엔 안 먹는다(100건 중 98건 위반) — 진행중이 범위를 좁히는 유일한 조건(필터 없으면 30,168건)
         only_ongoing = kwargs.get("only_ongoing", True)
         cutoff = (datetime.now() - timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0
@@ -198,8 +201,10 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
         except ValueError:
             pass
 
-    # 상태: API 필드 우선, 없으면 날짜 기반 판정
-    status = "ongoing" if item.get("rcrt_prgs_yn") == "Y" else "closed"
+    # 상태: 출처의 모집 진행 여부(rcrt_prgs_yn Y/N) 우선, 값이 없을 때만 마감일 판정(원칙 ②의 명시적 예외).
+    # 종전엔 값이 없으면 "closed" 상수였다(v1.6.0)
+    prgs = item.get("rcrt_prgs_yn")
+    status = {"Y": "ongoing", "N": "closed"}.get(prgs) or determine_status(end_str)
 
     # str() 전에 검사한다 — str(None)은 "None"이라 빈 ID가 "KSTARTUP-None"으로 통과한다
     pblanc_sn = item.get("pbanc_sn")
@@ -218,13 +223,14 @@ def _item_to_notice(item: dict, cutoff: datetime) -> Notice | None:
         source="K-Startup",
         bid_no=f"KSTARTUP-{pblanc_sn}",
         title=title,
-        organization=as_text(item.get("pbanc_ntrp_nm")) or as_text(item.get("sprv_inst")) or "창업진흥원",
+        # 공고기관 원문 한 필드(v1.6.0) — 종전 폴백 sprv_inst는 기관 유형("민간" 등), "창업진흥원"은 상수였다
+        organization=as_text(item.get("pbanc_ntrp_nm")),
         start_date=start_str or None,
         end_date=end_str or None,
         status=status,
         url=url,
         detail_url=detail_url,
-        content=content[:500] if content else "",
+        content=content,  # 절단 없음(v1.6.0 — 종전 500자)
         region=as_text(item.get("supt_regin")),
         category=as_text(item.get("supt_biz_clsfc")),
         # 원문 전부(v1.2.5, 원칙 ①) — 대상·신청방법·담당부서 등은 응답 키 그대로, HTML도 원문 그대로(표시용 정리는 소비자 몫)

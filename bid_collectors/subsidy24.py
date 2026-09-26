@@ -12,10 +12,10 @@ from datetime import datetime, timedelta
 
 from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
-from .utils.dates import parse_date
+from .utils.dates import parse_date, split_period
 from .utils.http import create_client
 from .utils.status import determine_status
-from .utils.text import as_text, clean_html_to_text
+from .utils.text import as_text
 
 logger = logging.getLogger("bid_collectors")
 
@@ -137,18 +137,16 @@ def _item_to_notice(item: dict) -> Notice:
 
     # 선택 필드는 null·타입 이상이어도 항목을 버리지 않는다(v1.2.5 B) — 원문은 extra에 그대로 남는다
     deadline = as_text(item.get("신청기한"))
-    end_str = parse_date(deadline)
+    # 기간이면 끝 날짜(v1.6.0 — 종전 parse_date는 기간의 시작일을 마감일로 넣었다, 부록 A-2)
+    period = split_period(deadline)
+    end_str = period[1] if period else parse_date(deadline)
 
     # 상세조회URL이 있으면 사용, 없으면 보조금24 기본 URL
     detail_url = as_text(item.get("상세조회URL"))
     url = detail_url or f"https://www.gov.kr/portal/rcvfvrSvc/dtlEx/{service_id}"
 
-    content_parts = []
-    if summary := as_text(item.get("서비스목적요약")):
-        content_parts.append(summary)
-    if detail := as_text(item.get("지원내용")):
-        content_parts.append(clean_html_to_text(detail))
-    content = "\n".join(content_parts)
+    # 본문 = 서비스목적요약 원문 한 필드(v1.6.0 — 종전 "요약 + 지원내용" 합성. 지원내용은 extra 원문)
+    content = as_text(item.get("서비스목적요약"))
 
     return Notice(
         source="보조금24",

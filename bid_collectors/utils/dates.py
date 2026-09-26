@@ -26,6 +26,17 @@ _PATTERNS = [
 ]
 
 
+def split_period(text: str) -> tuple[str | None, str | None] | None:
+    """기간 문자열 "A ~ B"를 (시작, 끝) 'yyyy-MM-dd'로 나눈다. `~`가 없으면 None(기간이 아니다).
+
+    v1.6.0 원칙 ② — 기간에서 마감일을 뽑을 때 쓴다. `parse_date`는 기간이면 **시작일**을 돌려주므로 마감일 칸에 쓰면 안 된다.
+    """
+    if not text or "~" not in text:
+        return None
+    head, _, tail = text.partition("~")
+    return parse_date(head), parse_date(tail)
+
+
 def parse_date(text: str) -> str | None:
     """날짜 문자열을 'yyyy-MM-dd' 형식으로 정규화.
 

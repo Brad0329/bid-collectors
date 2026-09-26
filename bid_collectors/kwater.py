@@ -35,7 +35,6 @@ OPERATIONS = ("cntrwkList", "servcList", "gdsList", "dmscptList")  # 공사·용
 FULL_ROWS = 1000  # 한 페이지 전량 — 정렬 불안정으로 인한 겹침·누락이 없다
 ROWS = 50  # 전량이 빈 본문일 때 나눠 받는 크기(100건 응답이 약 40KB)
 DEFAULT_MAX_PAGES = 20
-ORGANIZATION = "한국수자원공사"  # 단일 기관 API — 알리오 pname과 같은 이름(계약 부서는 extra의 cntrctDeptNm)
 DETAIL_URL = "https://ebid.kwater.or.kr/fz"  # 알리오 refrUrl의 bidno= 링크(2026-09-25 확인)
 # 상세(v1.5.0) — 공식 API가 아니라 사이트(WebSquare) 화면이 부르는 내부 JSON. 사이트 개편 시 깨지며 그때는 예외로 드러난다.
 DETAIL_API_URL = "https://ebid.kwater.or.kr/bidpblanc/bidpblancsttus/selectBidPblancDtl.do"
@@ -207,10 +206,12 @@ def _item_to_notice(item: dict) -> Notice:
         source="수자원공사",
         bid_no=f"KWATER-{bid_no}",
         title=title,
-        organization=ORGANIZATION,
+        # 단일 기관 API라 기관 필드가 없다 — 빈 값(v1.6.0 원칙 ②, 종전 "한국수자원공사" 상수. 계약 부서는 extra의 cntrctDeptNm).
+        # 취소 표시 필드도 없다 — 취소 공고는 API에서 빠진다(bidwatch F-017 조사)
+        organization="",
         start_date=start_str,
         end_date=end_str or None,
-        status=determine_status(end_str) if end_str else "ongoing",
+        status=determine_status(end_str),
         url=url,
         detail_url=url,
         budget=None,  # tndrPlnprc는 0(=미공개)이 절반 — 금액 해석은 원칙 ②, 원문은 extra(2026-09-26 사용자)

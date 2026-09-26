@@ -38,7 +38,9 @@ class TestMapping:
         assert n.source == "가스공사"
         assert n.bid_no == "KOGAS-2026092314"
         assert n.title == "[평택] 스팀보일러 연수기 전용 재생용 소금 구매"
-        assert n.organization == "한국가스공사"
+        assert n.organization == ""  # 단일 기관 API — 기관 필드가 없다(v1.6.0 원칙 ②, 종전 상수)
+        assert n.status == "cancelled"  # 출처가 명시한 취소 CANCEL_YN=취소(v1.6.0), 마감일은 미래
+        assert _item_to_notice(etree.fromstring(_item_xml().encode())).status == "ongoing"
         assert n.start_date == date.today()
         assert n.end_date == date.today() + timedelta(days=7)
         assert n.category == "물품"

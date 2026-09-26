@@ -50,7 +50,7 @@ class TestMapping:
         n = _item_to_notice(_item())
         assert n.source == "수자원공사"
         assert n.bid_no == "KWATER-B5202603396"
-        assert n.organization == "한국수자원공사"
+        assert n.organization == ""  # 단일 기관 API — 기관 필드가 없다(v1.6.0 원칙 ②, 종전 상수)
         assert n.start_date == TODAY
         assert n.end_date == TODAY + timedelta(days=7)
         assert n.category == "용역"

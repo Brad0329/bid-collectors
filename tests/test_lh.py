@@ -46,10 +46,10 @@ class TestMapping:
         assert n.source == "LH"
         assert n.bid_no == "LH-2603329"  # 차수 제외 — 정정은 같은 행의 bidDegree가 오른다
         assert n.title == "부산울산지역본부 사옥 카리프트 교체공사"
-        assert n.organization == "한국토지주택공사"
+        assert n.organization == ""  # 단일 기관 API — 기관 필드가 없다(v1.6.0 원칙 ②, 종전 "한국토지주택공사" 상수)
         assert n.start_date == date.today()
         assert n.end_date == date.today() + timedelta(days=5)
-        assert n.status == "ongoing"
+        assert n.status == "ongoing"  # bidKind 정정공고 — 취소가 아니면 마감일 판정
         assert n.category == "시설공사"
         assert n.budget is None  # 금액은 extra 원문(2026-09-26 사용자)
         assert n.url == ("https://ebid.lh.or.kr/ebid.et.tp.cmd.BidConstructDetailListCmd.dev"
@@ -58,6 +58,11 @@ class TestMapping:
         assert n.extra["designPrc"] == "147814658"
         assert n.extra["zoneHqCd"] == "부산울산지역본부"
         assert "bidnmEng" not in n.extra and "zoneRstrct2" not in n.extra  # 공백만인 칸은 뺀다
+
+    def test_cancel_notice_is_cancelled(self):
+        """v1.6.0 — 출처가 명시한 취소(bidKind=취소공고, 값 뒤 공백 포함) → cancelled, 마감일이 미래여도."""
+        n = _item_to_notice(_element(_item_xml().replace("정정공고 ", "취소공고 ")))
+        assert n.status == "cancelled"
 
     def test_detail_url_by_job_type(self):
         assert "BidConstructDetailListCmd" in detail_url("시설공사", "1", "00")

@@ -23,13 +23,12 @@ from .models import Notice
 from .utils.datagokr import fetch_pages, parse_xml
 from .utils.dates import parse_date
 from .utils.http import create_client
-from .utils.status import determine_status
+from .utils.status import CANCEL_KIND, determine_status
 
 API_URL = "https://apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo"
 ROWS = 1000
 DEFAULT_MAX_PAGES = 20
 NODATA = ("03",)
-ORGANIZATION = "한국토지주택공사"  # 단일 기관 API라 응답에 기관 필드가 없다 — 알리오 pname과 같은 이름(지역본부는 extra의 zoneHqCd)
 
 # LH 전자입찰 상세 화면 — 업무 구분(cstrtnJobGbNm)마다 경로가 다르다. 3종은 알리오 refrUrl 17건(2026-09-25),
 # 물품은 검색 화면 JS의 업무 코드 30 경로로 확인(2026-09-26 표본 5건 + 실측 1건 열림).
@@ -275,10 +274,11 @@ def _item_to_notice(item) -> Notice:
         source="LH",
         bid_no=f"LH-{bid_num}",
         title=title,
-        organization=ORGANIZATION,
+        # 단일 기관 API라 응답에 기관 필드가 없다 — 빈 값(v1.6.0 원칙 ②, 종전 "한국토지주택공사" 상수. 지역본부는 extra의 zoneHqCd)
+        organization="",
         start_date=start_str,
         end_date=end_str or None,
-        status=determine_status(end_str) if end_str else "ongoing",
+        status=determine_status(end_str, cancelled=t("bidKind") == CANCEL_KIND),
         url=url,
         detail_url=url,
         budget=None,  # 추정가격·설계가·기초금액 중 무엇을 budget으로 볼지는 원칙 ② 결정 — 금액은 extra 원문(2026-09-26 사용자)

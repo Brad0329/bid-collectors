@@ -26,7 +26,7 @@ from .utils.status import determine_status
 API_URL = "https://apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2"
 ROWS = 1000
 DEFAULT_MAX_PAGES = 20
-ORGANIZATION = "한국가스공사"  # 단일 기관 API라 응답에 기관 필드가 없다 — 알리오 pname과 같은 이름
+CANCEL_YN = "취소"  # CANCEL_YN 값 — 취소 공고 표시(bidwatch F-017과 같은 값)
 # 가스공사 전자입찰 상세 — 알리오 refrUrl 11건 전부 bid_code=001·round=01(2026-09-25). API 응답엔 두 값이 없다.
 DETAIL_URL = "https://bid.kogas.or.kr:9443/supplier/contents/bid/bid_detail_view_notice.jsp"
 SITE_ORIGIN = "https://bid.kogas.or.kr:9443"
@@ -182,10 +182,10 @@ def _item_to_notice(item) -> Notice:
         source="가스공사",
         bid_no=f"KOGAS-{code}",
         title=title,
-        organization=ORGANIZATION,
+        organization="",  # 단일 기관 API라 응답에 기관 필드가 없다 — 빈 값(v1.6.0 원칙 ②, 종전 "한국가스공사" 상수)
         start_date=start_str,
         end_date=end_str or None,
-        status=determine_status(end_str) if end_str else "ongoing",
+        status=determine_status(end_str, cancelled=t("CANCEL_YN") == CANCEL_YN),
         url=url,
         detail_url=url,
         budget=None,  # 응답에 예산 필드가 없다(낙찰금액 SUCCESS_AMT뿐)

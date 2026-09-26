@@ -167,7 +167,9 @@ CASES = {
     ),
     D2bCollector: Case(  # 목록 5종 중 국내경쟁에만 항목을 싣는다(_mock_d2b)
         lambda: D2bCollector(api_key="k"), _mock_d2b,
-        lambda i: {"g2bPblancNo": i, "pblancOdr": "1", "bidNm": f"공고{i}", "pblancDate": TODAY.strftime("%Y%m%d")},
+        lambda i: {"g2bPblancNo": i, "pblancOdr": "1", "bidNm": f"공고{i}", "pblancDate": TODAY.strftime("%Y%m%d"),
+                   # 상세 화면 주소 필드(v1.6.0) — 없으면 "주소 불가" errors가 붙는다(test_d2b::test_unbuildable_url_is_reported)
+                   "orntCode": "ERA", "pblancSeCode": "B", "pblancNo": "ERA0005", "dcsNo": "5606N", "demandYear": "2026"},
         "g2bPblancNo", "bidNm", "0", "biddocPresentnClosDt",
         # XML은 값이 전부 문자열이고 날짜는 선택 필드라 "형식 이상"을 만들 수 없다 → bad_format 없음
     ),

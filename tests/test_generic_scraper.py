@@ -418,7 +418,8 @@ class TestParseRows:
         notices, *_ = scraper._parse_rows(html, cutoff)
         n = notices[0]
         assert n.source == "커스텀기관"
-        assert n.organization == "커스텀기관"
+        assert n.organization == ""  # 기관 셀렉터 없음 — v1.6.0 원칙 ②(종전 config.name 상수, 사이트 이름은 source)
+        assert n.source == "커스텀기관"
         assert n.url == "https://example.com/detail/99"
         assert n.detail_url == "https://example.com/detail/99"
 

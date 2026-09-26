@@ -410,9 +410,11 @@ class GenericScraper(BaseCollector):
                     source=self.config.name,
                     bid_no=self._make_bid_no(title, detail_url),
                     title=title,
-                    organization=self.config.name,
+                    # 기관 셀렉터가 없다 — 빈 값(v1.6.0 원칙 ②, 종전 config.name 상수. 사이트 이름은 source에 있다)
+                    organization="",
                     start_date=start_date,
                     end_date=None,
+                    # 게시일 판정(마감일 아님) — 원칙 ② 위반이지만 고치지 않는다(2026-09-25 사용자 "안 함": BidWatch가 배지를 숨긴다)
                     status=determine_status(parsed_date),
                     url=detail_url,
                     detail_url=detail_url,

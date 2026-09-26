@@ -9,8 +9,8 @@
 > (JSON API 모드 = v1.2, 공기업 API = 필요성 판단 후).
 
 ## 시스템 개요
-- 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부)와 임의 HTML
-  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.3.0).
+- 공공기관 입찰공고·지원사업 공고를 공공 API(나라장터·K-Startup·기업마당·보조금24·중소벤처기업부·알리오, 자체조달 기관 LH·가스공사·국방 d2b·수자원공사)와 임의 HTML
+  게시판(GenericScraper)에서 가져와 표준 `Notice`/`CollectResult`로 돌려주는 파이썬 패키지(v1.5.0).
   소비자는 BidWatch(`C:\Users\user\Documents\bidwatch`, editable 설치). 역할 경계: 외부 사이트에서 공고를 가져오는 것은
   전부 이 패키지 / DB 저장·키워드 매칭·스케줄링·AI 설정 생성·캐싱은 BidWatch. 요구사항 상세는 `docs/REQUIREMENTS.md`.
 

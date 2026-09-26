@@ -8,7 +8,7 @@ import respx
 from lxml import etree
 
 from bid_collectors import D2bCollector
-from bid_collectors.d2b import BASE_URL, LISTS, _item_to_notice
+from bid_collectors.d2b import BASE_URL, DETAILS, LISTS, _item_to_notice
 
 SPEC = {s.kind: s for s in LISTS}
 
@@ -138,3 +138,121 @@ class TestFetch:
         for kind in ("국내수의", "시설수의"):
             assert (p[kind]["prqudoPresentnClosDateBegin"], p[kind]["prqudoPresentnClosDateEnd"]) == (_d(0), _d(365))
             assert "anmtDateBegin" not in p[kind]
+
+
+# ── fetch_detail (v1.5.0) ── 목록 조회 행: 상세에 필요한 필드(orntCode·pblancYear·pblancSeCode·iemNo·ntatPlanDate)까지 든 실측 모양
+LOOKUP_ROWS = {
+    # 같은 공고의 취소 차수가 함께 온다(실측: 원공고 B 차수 1·취소 J 차수 2) — 다른 차수 행을 앞에 둬 차수 비교를 잰다
+    "시설경쟁": [ITEMS["시설경쟁"] | {"pblancYear": "2026", "orntCode": "LGP", "pblancNo": "LGP0127", "pblancSeCode": "J",
+                               "pblancOdr": "2"},
+             ITEMS["시설경쟁"] | {"pblancYear": "2026", "orntCode": "LGP", "pblancNo": "LGP0127", "pblancSeCode": "A"}],
+    "국내수의": [ITEMS["국내수의"] | {"orntCode": "HCF", "dcsNo": "99999"},  # 같은 공고번호의 다른 판단번호(연도 재사용)
+             ITEMS["국내수의"] | {"orntCode": "HCF", "ntatPlanDate": "20260930"}],
+    "시설수의": [ITEMS["시설수의"] | {"orntCode": "MCN", "cntrwkNo": "2025-14402"},  # 전년도 공사번호에 같은 공고번호
+             ITEMS["시설수의"] | {"orntCode": "MCN", "ntatPlanDate": "20261001"}],
+}
+DETAIL_ITEM = {"cntrwkNm": "00부대 사무실 환경 개선공사", "estmPrce": "439988182", "areaLmttList": "[16] 경기도",
+               "lcnsLmttList": "[0001] 토목공사업^[0003] 토목건축공사업", "baseCoam": "0", "chargerNm": "정재헌"}
+
+
+def _detail_xml(items: list[dict]) -> bytes:
+    """상세 응답 — body 아래 item이 바로 온다(items·totalCount 없음). 0건이면 <body/>(실측)."""
+    inner = "".join(_item_xml(i) for i in items)
+    return ("<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header>" +
+            (f"<body>{inner}</body>" if items else "<body/>") + "</response>").encode()
+
+
+def _detail_route(kind: str, items: list[dict] | None = None):
+    op = DETAILS[kind].operation
+    return respx.get(BASE_URL + op).mock(
+        return_value=httpx.Response(200, content=_detail_xml([DETAIL_ITEM] if items is None else items)))
+
+
+class TestFetchDetail:
+    @pytest.mark.parametrize("kind, expected", [
+        ("국내경쟁", {"demandYear": "2026", "orntCode": "ERA", "pblancNo": "ERA0005", "dcsNo": "5606N", "pblancOdr": "3"}),
+        ("국외경쟁", {"pblancYear": "2026", "pblancNo": "ELA0026", "dcsNo": "BBAL6013", "groupNo": "005", "pblancOdr": "1"}),
+    ])
+    @respx.mock
+    async def test_detail_competitive_params(self, kind, expected):
+        route = _detail_route(kind)
+        d = await D2bCollector(api_key="k").fetch_detail(BID_NO[kind])
+        assert route.call_count == 1  # 목록 조회 없이 1회
+        params = dict(route.calls[0].request.url.params)
+        params.pop("serviceKey")
+        assert params == expected
+        assert d["estmPrce"] == "439988182"
+
+    @pytest.mark.parametrize("kind, expected", [
+        ("시설경쟁", {"pblancYear": "2026", "orntCode": "LGP", "pblancNo": "LGP0127", "cntrwkNo": "2026-15117",
+                  "pblancSeCode": "A", "pblancOdr": "1"}),
+        ("국내수의", {"demandYear": "2026", "orntCode": "HCF", "pblancNo": "HCF0191", "dcsNo": "35442", "iemNo": "***",
+                  "pblancOdr": "2", "ntatPlanDate": "20260930"}),
+        ("시설수의", {"orntCode": "MCN", "pblancNo": "MCN0044", "cntrwkNo": "2026-14402", "pblancOdr": "1",
+                  "ntatPlanDate": "20261001"}),
+    ])
+    @respx.mock
+    async def test_detail_lookup_then_detail(self, kind, expected):
+        """상세 필수 값이 bid_no에 없다 — 목록을 키로 1회 조회해 같은 키·차수 행에서 얻는다(다른 판단번호·공사번호·차수 행은 건너뜀)."""
+        lookup = respx.get(BASE_URL + SPEC[kind].operation).mock(
+            return_value=httpx.Response(200, content=_body(LOOKUP_ROWS[kind])))
+        route = _detail_route(kind)
+        await D2bCollector(api_key="k").fetch_detail(BID_NO[kind])
+        assert lookup.call_count == 1 and route.call_count == 1
+        params = dict(route.calls[0].request.url.params)
+        params.pop("serviceKey")
+        assert params == expected
+        q = lookup.calls[0].request.url.params
+        if kind == "시설경쟁":
+            assert q["g2bPblancNo"] == "2026LGP01272026-15117" and "prqudoPresentnClosDateBegin" not in q
+        else:  # 수의 목록은 견적서 마감 범위를 빼면 0건 — 앞뒤로 넓게
+            assert q[DETAILS[kind].lookup] == expected["pblancNo"]
+            assert q["prqudoPresentnClosDateBegin"] < _d(-365) and q["prqudoPresentnClosDateEnd"] > _d(365)
+
+    @respx.mock
+    async def test_detail_maps_item(self):
+        _detail_route("국내경쟁")
+        d = await D2bCollector(api_key="k").fetch_detail(BID_NO["국내경쟁"])
+        assert d == DETAIL_ITEM | {"attachments": [], "content": ""}  # 원문 전부·이름 그대로, ^ 구분 문자열 원문, 0 포함
+
+    @respx.mock
+    async def test_detail_not_found_raises(self):
+        """없는 공고와 파라미터 불일치가 같은 빈 응답(resultCode 00 + <body/>)이다 — 빈 dict로 넘기지 않는다."""
+        _detail_route("국내경쟁", items=[])
+        with pytest.raises(ValueError, match="결과 없음"):
+            await D2bCollector(api_key="k").fetch_detail(BID_NO["국내경쟁"])
+
+    @respx.mock
+    async def test_detail_lookup_miss_raises_without_detail_call(self):
+        respx.get(BASE_URL + SPEC["시설수의"].operation).mock(
+            return_value=httpx.Response(200, content=_body([LOOKUP_ROWS["시설수의"][0]])))  # 다른 공사번호 행만
+        route = _detail_route("시설수의")
+        with pytest.raises(ValueError, match="같은 키·차수 행을 못 찾음"):
+            await D2bCollector(api_key="k").fetch_detail(BID_NO["시설수의"])
+        assert route.call_count == 0
+
+    @respx.mock
+    async def test_detail_error_code_raises(self):
+        respx.get(BASE_URL + DETAILS["국외경쟁"].operation).mock(return_value=httpx.Response(200, content=(
+            b"<response><header><resultCode>22</resultCode><resultMsg>LIMITED NUMBER OF SERVICE REQUESTS EXCEEDS</resultMsg>"
+            b"</header></response>")))
+        with pytest.raises(ValueError, match="API 에러: 22"):
+            await D2bCollector(api_key="k").fetch_detail(BID_NO["국외경쟁"])
+
+    @respx.mock
+    async def test_http_error_raises_and_key_masked(self):
+        respx.get(BASE_URL + DETAILS["국내경쟁"].operation).mock(return_value=httpx.Response(500))
+        with pytest.raises(RuntimeError) as exc:
+            await D2bCollector(api_key="SECRETKEY123").fetch_detail(BID_NO["국내경쟁"])
+        assert "SECRETKEY123" not in str(exc.value)
+        assert exc.value.__cause__ is None and exc.value.__suppress_context__  # 원 예외(키 든 URL)를 체인에 남기지 않는다
+
+    @pytest.mark.parametrize("bad", ["2026ERA00055606N", "D2B-국내경쟁-2026ERA00055606N", "D2B-국내경쟁-2026ERA00055606N-X",
+                                     "D2B-없는구분-X-1",
+                                     "D2B-국외경쟁-2026ELA0026-1", "ALIO-1"])
+    @respx.mock
+    async def test_bad_bid_no_raises_without_request(self, bad):
+        route = respx.get(url__startswith=BASE_URL)
+        with pytest.raises(ValueError, match="bid_no"):
+            await D2bCollector(api_key="k").fetch_detail(bad)
+        assert route.call_count == 0

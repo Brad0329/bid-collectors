@@ -298,11 +298,12 @@
   - [x] 수의 2종의 start_date는 None(협상 예정일을 공고일로 쓰지 않는다) → `test_negotiation_has_no_start_date`(2)
   - [x] 목록 1종 실패 → 나머지 4종 결과 보존 + errors에 그 목록 이름 → `test_one_list_failure_keeps_others`
   - [x] 국외경쟁 요청에 개찰일 범위, 수의 2종 요청에 견적서 마감 범위가 들어간다 → `test_list_date_params`
-  - [ ] (v1.5.0) fetch_detail 국내·국외경쟁: bid_no 키에서 상세 파라미터를 복원해 상세 1회(요청 파라미터 단언) → `test_detail_competitive_params`(2)
-  - [ ] (v1.5.0) fetch_detail 시설경쟁·국내수의·시설수의: bid_no 키로 목록 1회 → 키·차수가 같은 행에서 `pblancSeCode`/`iemNo`/`ntatPlanDate`를 얻어 상세 1회
-    → `test_detail_lookup_then_detail`(3)
-  - [ ] (v1.5.0) 상세 `item` 필드 전부·원래 이름(`^` 구분 문자열은 원문 그대로), `attachments == []`·`content == ""` → `test_detail_maps_item`
-  - [ ] (v1.5.0) 목록에서 행을 못 찾음·상세 item 0개(없는 번호와 틀린 파라미터가 같은 응답)·`resultCode` ≠ 00 → 예외(키 마스킹) → `test_detail_not_found_raises`·`test_detail_error_code_raises`
+  - [x] (v1.5.0) fetch_detail 국내·국외경쟁: bid_no 키에서 상세 파라미터를 복원해 상세 1회(요청 파라미터 단언) → `test_detail_competitive_params`(2)
+  - [x] (v1.5.0) fetch_detail 시설경쟁·국내수의·시설수의: bid_no 키로 목록 1회 → 키·차수가 같은 행에서 `pblancSeCode`/`iemNo`/`ntatPlanDate`를 얻어 상세 1회
+    (다른 차수·판단번호·공사번호 행은 건너뜀) → `test_detail_lookup_then_detail`(3)
+  - [x] (v1.5.0) 상세 `item` 필드 전부·원래 이름(`^` 구분 문자열은 원문 그대로), `attachments == []`·`content == ""` → `test_detail_maps_item`
+  - [x] (v1.5.0) 목록에서 행을 못 찾음(상세를 부르지 않음)·상세 item 0개(없는 번호와 틀린 파라미터가 같은 응답)·`resultCode` ≠ 00 → 예외, HTTP 오류는 키를 가리고 원 예외를 체인에 남기지 않음
+    → `test_detail_not_found_raises`·`test_detail_lookup_miss_raises_without_detail_call`·`test_detail_error_code_raises`·`test_http_error_raises_and_key_masked`
 - **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)

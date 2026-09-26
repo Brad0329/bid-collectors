@@ -319,9 +319,11 @@
   - [x] 마감일 `-` → end_date None, 항목은 유지 → `test_dash_deadline_is_none`
   - [x] 달마다 한 페이지(numOfRows 1000) 1회, 빈 본문이면 50건씩 나눠 받고 겹친 행 수를 errors에(회귀 — 실측 4건 누락)
     → `test_collects_four_operations_with_params` · `test_falls_back_to_small_pages_and_reports_overlap`
-  - [ ] (v1.5.0) fetch_detail: `POST ebid.kwater.or.kr/.../selectBidPblancDtl.do`(`{"dmaSearchData":{"tndrPbanno"}}`) → `data.tndrPblanc` 필드 전부·원래 이름 +
-    `tndrPrgsOrdrList`·`atchflList` 원문 list + attachments(name = `docFileNm`, url = `downloadAtchFileOne.do?xmlValue={"atchflId","fileSeq"}`) → `test_detail_maps_fields_and_attachments`
-  - [ ] (v1.5.0) `message.code` ≠ success → 예외, success인데 `tndrPblanc`가 null(없는 번호도 success로 온다) → 예외 → `test_detail_error_code_raises`·`test_detail_not_found_raises`
+  - [x] (v1.5.0) fetch_detail: `POST ebid.kwater.or.kr/.../selectBidPblancDtl.do`(`{"dmaSearchData":{"tndrPbanno"}}`) → `data.tndrPblanc` 필드 전부·원래 이름 +
+    `data`의 나머지 필드 원문(`tndrPrgsOrdrList`·`atchflList` 포함) + attachments(name = `docFileNm`, url = `downloadAtchFileOne.do?xmlValue={"atchflId","fileSeq"}`, 없으면 `[]`)
+    → `test_detail_maps_fields_and_attachments`·`test_no_files_gives_empty_list`
+  - [x] (v1.5.0) `message.code` ≠ success → 예외, success인데 `tndrPblanc`가 null(없는 번호도 success로 온다) → 예외, `atchflList`가 list 아님 → 예외
+    → `test_detail_error_code_raises`·`test_detail_not_found_raises`·`test_malformed_raises`
 - **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ## 비기능 요구사항

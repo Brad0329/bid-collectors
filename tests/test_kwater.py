@@ -1,5 +1,6 @@
 """한국수자원공사 입찰공고 수집기(kwater.py) 단위 테스트 — F-014."""
 
+import json
 from datetime import date, timedelta
 
 import httpx
@@ -7,7 +8,8 @@ import pytest
 import respx
 
 from bid_collectors import KwaterCollector
-from bid_collectors.kwater import BASE_URL, OPERATIONS, _item_to_notice, _months, parse_json
+from bid_collectors.kwater import (ATTACH_URL, BASE_URL, DETAIL_API_URL, OPERATIONS, _item_to_notice, _months,
+                                   parse_json)
 
 TODAY = date.today()
 
@@ -153,3 +155,80 @@ class TestFetch:
         assert result.notices == []
         assert len(result.errors) >= 4
         assert not any("SECRETKEY123" in e for e in result.errors)
+
+
+def _detail_body(pblanc: dict | None = None, files: list | None = None) -> dict:
+    """상세 응답 — 2026-09-26 실측(`scripts/_tmp/kwater_dtl/dtl_B5202603349.json`)을 줄인 모양."""
+    if pblanc is None:
+        pblanc = {"tndrPblancNm": "금강 합숙소 전기공사 감리용역", "tndrPbanno": "B5202603349", "tndrPblancDe": "20260918",
+                  "rqestAmt": 34835000, "jntctrLmttEntrpsCo": 0, "ordgPlanNo": None, "tndrMthNm": "총액입찰", "cnstctrPrcnsexp": 0}
+    return {"message": {"code": "success", "code_name": "서비스 처리에 성공했습니다."},
+            "data": {"tndrPblanc": pblanc, "tndrStatus": "DATA_ERR", "tndrPartcptRqstInfo": None, "isEntrpsLogin": False,
+                     "atchflList": files if files is not None else [
+                         {"docNm": "공고문", "docFileNm": "공고문.hwp", "atchflId": "FMS1", "fileSeq": 1, "sortOrdr": 2},
+                         {"docNm": "과업지시서", "docFileNm": "과업.hwp", "atchflId": "FMS2", "fileSeq": 1, "sortOrdr": 1}],
+                     "tndrPrgsOrdrList": [{"prgsOrdr": 1, "prgsDivNm": "입찰공고", "strtDt": "202609210900", "closDt": "202609211700"}],
+                     "ordgCoentrps": {"jntctrYn": "N"}}}
+
+
+class TestFetchDetail:
+    @respx.mock
+    async def test_detail_maps_fields_and_attachments(self):
+        route = respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=_detail_body()))
+        d = await KwaterCollector(api_key="k").fetch_detail("KWATER-B5202603349")
+        assert json.loads(route.calls[0].request.content) == {"dmaSearchData": {"tndrPbanno": "B5202603349"}}
+        # tndrPblanc 평탄화(0 포함·None 제외) + data 나머지 원문(None 제외) + 2개
+        assert set(d) == {"tndrPblancNm", "tndrPbanno", "tndrPblancDe", "rqestAmt", "jntctrLmttEntrpsCo", "tndrMthNm",
+                          "cnstctrPrcnsexp", "tndrStatus", "isEntrpsLogin", "atchflList", "tndrPrgsOrdrList", "ordgCoentrps",
+                          "content", "attachments"}
+        assert d["rqestAmt"] == 34835000 and d["jntctrLmttEntrpsCo"] == 0
+        assert d["tndrPrgsOrdrList"][0]["closDt"] == "202609211700"
+        assert d["content"] == ""
+        assert [a["name"] for a in d["attachments"]] == ["공고문.hwp", "과업.hwp"]  # 원문 순서 그대로
+        url = httpx.URL(d["attachments"][0]["url"])
+        assert str(url).startswith(ATTACH_URL)
+        assert json.loads(url.params["xmlValue"]) == {"atchflId": "FMS1", "fileSeq": 1}
+
+    @respx.mock
+    async def test_no_files_gives_empty_list(self):
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=_detail_body(files=[])))
+        d = await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
+        assert d["attachments"] == []
+
+    @respx.mock
+    async def test_detail_not_found_raises(self):
+        """없는 공고번호도 code=success로 오고 tndrPblanc만 null이다(2026-09-26 실측) — 빈 dict로 넘기지 않는다."""
+        body = _detail_body()
+        body["data"]["tndrPblanc"] = None
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=body))
+        with pytest.raises(ValueError, match="tndrPblanc 없음"):
+            await KwaterCollector(api_key="k").fetch_detail("KWATER-B3209909999")
+
+    @respx.mock
+    async def test_detail_error_code_raises(self):
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(
+            200, json={"message": {"code": "error", "code_name": "에러가 발생했습니다!"}}))
+        with pytest.raises(ValueError, match="code='error'"):
+            await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
+
+    @respx.mock
+    async def test_http_error_raises(self):
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(500))
+        with pytest.raises(httpx.HTTPStatusError):
+            await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
+
+    @respx.mock
+    async def test_malformed_raises(self):
+        body = _detail_body()
+        body["data"]["atchflList"] = {"docFileNm": "x"}
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=body))
+        with pytest.raises(ValueError, match="atchflList가 list가 아님"):
+            await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
+
+    @pytest.mark.parametrize("bad", ["B5202603349", "ALIO-1", "KWATER-", "KWATER-  "])
+    @respx.mock
+    async def test_bad_bid_no_raises_without_request(self, bad):
+        route = respx.post(DETAIL_API_URL)
+        with pytest.raises(ValueError, match="bid_no 형식"):
+            await KwaterCollector(api_key="k").fetch_detail(bad)
+        assert route.call_count == 0

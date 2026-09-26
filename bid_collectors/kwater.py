@@ -19,6 +19,7 @@ import logging
 import time
 from collections import Counter
 from datetime import date, datetime, timedelta
+from urllib.parse import urlencode
 
 from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
@@ -36,6 +37,10 @@ ROWS = 50  # 전량이 빈 본문일 때 나눠 받는 크기(100건 응답이 �
 DEFAULT_MAX_PAGES = 20
 ORGANIZATION = "한국수자원공사"  # 단일 기관 API — 알리오 pname과 같은 이름(계약 부서는 extra의 cntrctDeptNm)
 DETAIL_URL = "https://ebid.kwater.or.kr/fz"  # 알리오 refrUrl의 bidno= 링크(2026-09-25 확인)
+# 상세(v1.5.0) — 공식 API가 아니라 사이트(WebSquare) 화면이 부르는 내부 JSON. 사이트 개편 시 깨지며 그때는 예외로 드러난다.
+DETAIL_API_URL = "https://ebid.kwater.or.kr/bidpblanc/bidpblancsttus/selectBidPblancDtl.do"
+# 첨부 내려받기 — 사이트 JS bid_cmmn.js의 bid.download가 쓰는 경로(2026-09-26 3건 실제로 받음, 세션 불필요)
+ATTACH_URL = "https://ebid.kwater.or.kr/sc/file/downloadAtchFileOne.do"
 
 
 def parse_json(content: bytes) -> tuple[list[dict], int]:
@@ -116,6 +121,25 @@ class KwaterCollector(BaseCollector):
             errors.append(skip_msg)
         return notices, pages, errors
 
+    async def fetch_detail(self, bid_no: str) -> dict:
+        """공고 1건 상세 (v1.5.0) — 요청금액·입찰 일정·담당자·첨부 등 목록 API(필드 12개)에 없는 것. 수집 경로에서는 부르지 않는다.
+
+        Returns: `data.tndrPblanc`의 비어 있지 않은 필드 전부·원래 이름 + `data`의 나머지 필드 원문 그대로(입찰 일정
+            `tndrPrgsOrdrList`·첨부 `atchflList` 포함) + `attachments`(`[{"name": docFileNm, "url"}]`, 없으면 []) + `content`("" — 본문 필드 없음,
+            공고문은 첨부 hwp).
+        Raises: `message.code`가 success가 아니면(요청 형식 오류·서버 오류) 예외, success인데 `tndrPblanc`가 null이면
+            (없는 공고번호도 success로 온다 — 2026-09-26 실측) 예외.
+        """
+        pbanno = bid_no.removeprefix("KWATER-") if bid_no.startswith("KWATER-") else ""
+        if not pbanno.strip():
+            raise ValueError(f"수자원공사 bid_no 형식이 아님(KWATER-{{tndrPbanno}}): {bid_no!r}")
+
+        async with create_client(timeout=15.0) as client:
+            resp = await client.post(DETAIL_API_URL, json={"dmaSearchData": {"tndrPbanno": pbanno}})
+            resp.raise_for_status()
+            body = resp.json()
+        return _parse_detail(body, bid_no)
+
     async def health_check(self) -> dict:
         start = time.time()
         try:
@@ -131,6 +155,37 @@ class KwaterCollector(BaseCollector):
         except Exception as e:
             return {"status": "error", "source": self.source_name, "message": self._mask(str(e)),
                     "response_time_ms": int((time.time() - start) * 1000)}
+
+
+def _parse_detail(body, bid_no: str) -> dict:
+    """상세 응답 JSON → fetch_detail 반환 dict. 형식이 다르면 ValueError."""
+    message = body.get("message") if isinstance(body, dict) else None
+    code = message.get("code") if isinstance(message, dict) else None
+    if code != "success":
+        name = message.get("code_name") if isinstance(message, dict) else None
+        raise ValueError(f"수자원공사 상세 {bid_no}: code={code!r} {name!r} — 요청 형식 오류 또는 서버 오류")
+    data = body.get("data")
+    pblanc = data.get("tndrPblanc") if isinstance(data, dict) else None
+    if not isinstance(pblanc, dict):
+        raise ValueError(f"수자원공사 상세 {bid_no}: tndrPblanc 없음 — 없는 공고번호(success로 온다) 또는 응답 형식 변경")
+    files = data.get("atchflList")
+    if files is None:
+        files = []
+    if not isinstance(files, list):
+        raise ValueError(f"수자원공사 상세 {bid_no}: atchflList가 list가 아님({type(files).__name__}) — 응답 형식 변경 의심")
+
+    detail = raw_fields(pblanc) or {}
+    rest = raw_fields({k: v for k, v in data.items() if k != "tndrPblanc"}) or {}
+    if clash := sorted(detail.keys() & rest.keys()):
+        raise ValueError(f"수자원공사 상세 {bid_no}: tndrPblanc와 data 키 충돌 {clash} — 응답 형식 변경 의심")
+    detail.update(rest)
+    detail["content"] = ""
+    detail["attachments"] = [
+        {"name": f.get("docFileNm"),
+         "url": f"{ATTACH_URL}?{urlencode({'xmlValue': json.dumps({'atchflId': f.get('atchflId'), 'fileSeq': f.get('fileSeq')}, separators=(',', ':'))})}"}
+        for f in files
+    ]
+    return detail
 
 
 def _item_to_notice(item: dict) -> Notice:

@@ -246,6 +246,12 @@
     → 헬퍼 `test_paginates_until_total`·`test_max_pages_truncation_reported_with_total`·`test_empty_middle_page_with_total_left_is_reported` · LH·가스 `test_paginates_by_total_count`
   - [x] 실호출: 최근 기간 1건 이상·errors 없음·합쳐진 공고 0(`total_fetched == total_after_dedup`)·원문 1페이지를 따로 받아 겹치는 항목마다 extra 키 집합 ==
     비어 있지 않은 원문 필드 집합(d2b는 국내경쟁, 수자원은 최근 달 용역 대조) → `test_integration_institutions.py` 4건(2026-09-26 통과)
+- **fetch_detail 공통 (v1.5.0, Phase 010)** — 계약 CONTRACT.md 2026-09-26 v1.5.0 행. 알리오(v1.3.0)와 같은 모양: 원천의 비어 있지 않은 필드 전부·원래 이름
+  (0 포함, None·빈 문자열 제외, 값은 원문 그대로) + `attachments: [{"name","url"}]`(없으면 `[]`) + `content`(넷 다 원천에 본문 필드가 없어 `""`).
+  실패·없는 공고는 예외. 수집 경로(`collect`)는 상세를 부르지 않는다. 기관별 기준은 각 절의 (v1.5.0) 항목.
+  - [ ] 4종 모두: 자기 접두사가 아닌 bid_no → 요청 없이 `ValueError` · HTTP 오류 → 예외 · 반환에 `attachments`(list)·`content`(str)가 늘 있다
+    → 수집기별 `TestFetchDetail::test_bad_bid_no_raises_without_request`·`test_http_error_raises`
+  - [ ] 실호출: 기관별 최근 공고 1건 이상 상세 → 예외 없음·원천 필드 수만큼 키·첨부 건수 == 원천 첨부 건수(d2b는 5종 각 1건) → `test_integration_institutions.py`
 
 ### F-011: LH 입찰공고 수집 (`LhCollector`)
 - **설명**: `GET apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo`(15159012) — XML **EUC-KR**, 공고일(`tndrbidRegDt`) 범위 `tndrbidRegDtStart/End`,
@@ -257,7 +263,13 @@
   - [x] `resultCode 03` → 0건·errors 없음 → `test_nodata_is_empty_not_error`
   - [x] EUC-KR 바이트 응답의 한글 제목이 깨지지 않는다 → `test_euc_kr_response`
   - [x] 업무 구분별 url 경로(3종 + 물품 목록 화면) → `test_detail_url_by_job_type`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
+  - [ ] (v1.5.0) fetch_detail: 검색(`BidMasterListCmd`, 날짜 칸 비움) 1회로 최신 차수·업무 코드(10 시설공사·20 용역·30 물품·40 지급자재)를 얻어
+    그 업무의 상세 화면을 그 차수로 부른다 → `test_detail_uses_latest_degree_and_job_cmd`
+  - [ ] (v1.5.0) 상세 표 → 키 `"표 이름/항목명"`(값 공백 정리), 파일정보 표 → attachments(url = `ebid.framework.download.dev` + filespec·filename·savedname)
+    → `test_detail_maps_tables_and_attachments`
+  - [ ] (v1.5.0) 검색 0건·공고번호 칸이 `NNNNNNN - NN`이 아님·건명 빈 값 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`
+  - [ ] (v1.5.0) `ebid.lh.or.kr`는 동봉한 중간 인증서를 더해 검증한다(검증을 끄지 않는다), 동봉 인증서가 만료 전 → `test_lh_ssl_context`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-012: 한국가스공사 입찰정보 수집 (`KogasCollector`)
 - **설명**: `GET apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2`(15157366) — XML, 공고일(`NOTICE_DT`) 범위 `DOCDATE_START/END`.
@@ -267,7 +279,10 @@
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
+  - [ ] (v1.5.0) fetch_detail: 상세 HTML(`bid_code=001&round=01`, EUC-KR/cp949) → 키 = 화면 항목명(공백 정리, 다른 값 칸 안의 중첩 항목은 바깥 값에 포함),
+    품목표 → 열 제목을 키로 한 list[dict], 공고 첨부 표 → attachments(url = 페이지 href 절대 주소) → `test_detail_maps_items_and_attachments`
+  - [ ] (v1.5.0) "정보가 존재하지 않습니다" 응답·공고번호 칸 ≠ 요청 번호·HTTP 400 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)
 - **설명**: `apis.data.go.kr/1690000/BidPblancInfoService`(15158416) 목록 5종 — XML(JSON은 `dcsNo`가 int/str로 섞인다). 오퍼레이션당 100회/일.
@@ -283,7 +298,12 @@
   - [x] 수의 2종의 start_date는 None(협상 예정일을 공고일로 쓰지 않는다) → `test_negotiation_has_no_start_date`(2)
   - [x] 목록 1종 실패 → 나머지 4종 결과 보존 + errors에 그 목록 이름 → `test_one_list_failure_keeps_others`
   - [x] 국외경쟁 요청에 개찰일 범위, 수의 2종 요청에 견적서 마감 범위가 들어간다 → `test_list_date_params`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
+  - [ ] (v1.5.0) fetch_detail 국내·국외경쟁: bid_no 키에서 상세 파라미터를 복원해 상세 1회(요청 파라미터 단언) → `test_detail_competitive_params`(2)
+  - [ ] (v1.5.0) fetch_detail 시설경쟁·국내수의·시설수의: bid_no 키로 목록 1회 → 키·차수가 같은 행에서 `pblancSeCode`/`iemNo`/`ntatPlanDate`를 얻어 상세 1회
+    → `test_detail_lookup_then_detail`(3)
+  - [ ] (v1.5.0) 상세 `item` 필드 전부·원래 이름(`^` 구분 문자열은 원문 그대로), `attachments == []`·`content == ""` → `test_detail_maps_item`
+  - [ ] (v1.5.0) 목록에서 행을 못 찾음·상세 item 0개(없는 번호와 틀린 파라미터가 같은 응답)·`resultCode` ≠ 00 → 예외(키 마스킹) → `test_detail_not_found_raises`·`test_detail_error_code_raises`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)
 - **설명**: `apis.data.go.kr/B500001/ebid/tndr3/{cntrwkList,servcList,gdsList,dmscptList}`(15101635) — JSON, 날짜 필터는 **월 단위 `searchDt=YYYYMM`**(공고일 기준) 하나뿐 →
@@ -299,7 +319,10 @@
   - [x] 마감일 `-` → end_date None, 항목은 유지 → `test_dash_deadline_is_none`
   - [x] 달마다 한 페이지(numOfRows 1000) 1회, 빈 본문이면 50건씩 나눠 받고 겹친 행 수를 errors에(회귀 — 실측 4건 누락)
     → `test_collects_four_operations_with_params` · `test_falls_back_to_small_pages_and_reports_overlap`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009)
+  - [ ] (v1.5.0) fetch_detail: `POST ebid.kwater.or.kr/.../selectBidPblancDtl.do`(`{"dmaSearchData":{"tndrPbanno"}}`) → `data.tndrPblanc` 필드 전부·원래 이름 +
+    `tndrPrgsOrdrList`·`atchflList` 원문 list + attachments(name = `docFileNm`, url = `downloadAtchFileOne.do?xmlValue={"atchflId","fileSeq"}`) → `test_detail_maps_fields_and_attachments`
+  - [ ] (v1.5.0) `message.code` ≠ success → 예외, success인데 `tndrPblanc`가 null(없는 번호도 success로 온다) → 예외 → `test_detail_error_code_raises`·`test_detail_not_found_raises`
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).

@@ -165,6 +165,16 @@
   - 범위 밖: 수자원 사전규격·발주계획(공고번호 없음)·입찰결과, d2b 상세·품목명세, 한전 포털(키 미발급), 코레일(비공식)
   - 완료 조건: F-011~F-014 기준 `[x]` + 테스트 대응(변이 확인) · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
 
+- [ ] Phase 010: v1.5.0 — 기관 수집기 4종 `fetch_detail` 수자원 → d2b → 가스공사 → LH (F-011~F-014·F-008) — **기능 추가(반환 None → dict, 시그니처·bid_no 불변) → minor 1.4.0 → 1.5.0**
+  - 출처: bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_institution_fetch_detail.md`(2026-09-26), 조사 2026-09-26 researcher 4건(원문 `scripts/_tmp/{kwater,kogas,lh,d2b}_dtl/`),
+    계약 CONTRACT.md 2026-09-26 v1.5.0 행(사용자 확인 — d2b 3종 목록 조회 후 상세 · LH TLS 중간 인증서 동봉).
+  - 트랙: 일반(interface.md §2 변경 — 계약 게이트). 검증: 기관별 단위(사다리) + 실호출 통합 + 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(태그 v1.4.0).
+  1. 수자원 · 2. d2b · 3. 가스공사 · 4. LH — 기관마다 `fetch_detail` + 단위 테스트(변이 확인) + 커밋
+  5. 통합 테스트(실호출, 기관별 최근 공고 1건 이상) · interface.md §2 · README · 버전 1.5.0 · handover `docs/handover/v1.5.0.md`
+     (d2b 호출 수·목록 한도 공유, LH 1.2GB 첨부 실례 — 스트리밍 권장, 비공식 3곳 깨짐 = 예외, 수자원 마감 `-` 공고는 상세 일정에 마감이 있다)
+  - 범위 밖: 첨부 파일 내려받기(url만 준다) · 수자원 목록 마감일을 상세 일정으로 채우기(수집 시점 정규화 — bidwatch 요청서 §4, 원칙 ②)
+  - 완료 조건: REQUIREMENTS F-011~F-014 (v1.5.0) 기준 `[x]` + 테스트 대응 · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
+
 ## 이후 단계 (Phase 번호 미발급 — 착수 시 번호를 받고 위 체크리스트로 옮긴다)
 
 - **원칙 ② Phase(일반 트랙)** — 표준 필드 파생 제거 + bidwatch 필드 사전 부록 A 남은 #2·#5·#6·#7·#8(end_date·budget·region·organization·status).

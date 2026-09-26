@@ -279,9 +279,10 @@
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
-  - [ ] (v1.5.0) fetch_detail: 상세 HTML(`bid_code=001&round=01`, EUC-KR/cp949) → 키 = 화면 항목명(공백 정리, 다른 값 칸 안의 중첩 항목은 바깥 값에 포함),
-    품목표 → 열 제목을 키로 한 list[dict], 공고 첨부 표 → attachments(url = 페이지 href 절대 주소) → `test_detail_maps_items_and_attachments`
-  - [ ] (v1.5.0) "정보가 존재하지 않습니다" 응답·공고번호 칸 ≠ 요청 번호·HTTP 400 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`
+  - [x] (v1.5.0) fetch_detail: 상세 HTML(`bid_code=001&round=01`, EUC-KR/cp949) → 키 = 화면 항목명(공백 정리, 빈 값 제외·`()` 같은 빈 표기는 원문 그대로,
+    다른 값 칸 안의 중첩 항목은 바깥 값에 포함) + `진행상태`·`진행안내`(취소는 안내 문구에만) + `품목내역`(열 제목을 키로 한 list[dict], colspan 하위 행은 칸을 펼쳐 맞춤) +
+    attachments(내려받기 링크 전부·페이지 순서 — 공고 첨부·표준 계약조건·구매요청, url = 절대 주소) → `test_detail_maps_items_and_attachments`
+  - [x] (v1.5.0) "정보가 존재하지 않습니다" 응답·공고번호 칸 ≠ 요청 번호·건명 없음·HTTP 400 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`(3)·`test_http_error_raises`
 - **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)

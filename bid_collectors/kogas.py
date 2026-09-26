@@ -12,6 +12,9 @@ API: GET https://apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2 (data.go.k
 import time
 from collections import Counter
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
 
 from .base import BaseCollector, raw_fields, require_fields
 from .models import Notice
@@ -26,6 +29,10 @@ DEFAULT_MAX_PAGES = 20
 ORGANIZATION = "한국가스공사"  # 단일 기관 API라 응답에 기관 필드가 없다 — 알리오 pname과 같은 이름
 # 가스공사 전자입찰 상세 — 알리오 refrUrl 11건 전부 bid_code=001·round=01(2026-09-25). API 응답엔 두 값이 없다.
 DETAIL_URL = "https://bid.kogas.or.kr:9443/supplier/contents/bid/bid_detail_view_notice.jsp"
+SITE_ORIGIN = "https://bid.kogas.or.kr:9443"
+# 상세(v1.5.0)는 공식 API가 아니라 이 화면 HTML을 읽는다 — 사이트 개편 시 깨지며 그때는 예외로 드러난다.
+# bid_code·round는 001/01 외에는 400(2026-09-26 실측 26건 — 재공고는 새 notice_code를 받는다).
+NOT_FOUND_TEXT = "정보가 존재하지 않습니다"  # 없는 공고: HTTP 200 + 이 alert만 든 159바이트
 
 
 class KogasCollector(BaseCollector):
@@ -59,6 +66,25 @@ class KogasCollector(BaseCollector):
             errors.append(skip_msg)
         return notices, pages, errors
 
+    async def fetch_detail(self, bid_no: str) -> dict:
+        """공고 1건 상세 (v1.5.0) — 추정가격·계약방법·담당자·입찰 진행순서·품목·첨부. 목록 API(필드 14개)엔 금액이 없다.
+
+        Returns: 화면 항목명 → 값(공백 정리한 원문 텍스트, 빈 값 제외, 같은 항목명이 다시 나오면 list) +
+            `진행상태`·`진행안내`(화면 상단 진행 단계·안내 문구 — 취소 공고는 안내 문구에만 "취소"가 나온다) +
+            `품목내역`(품목표 — 열 제목을 키로 한 list[dict]) + `attachments`(페이지의 내려받기 링크 전부, 순서대로 —
+            공고 첨부 `bid_download_attfile`·표준 계약조건 `bid_download_rule_proc`·구매요청 첨부) + `content`("" — 본문 필드 없음).
+        Raises: HTTP 오류(파라미터 오류는 400), "정보가 존재하지 않습니다"(없는 공고), 공고번호 칸이 요청 번호와 다르거나
+            건명이 없음(화면 개편 의심) → 예외.
+        """
+        code = bid_no.removeprefix("KOGAS-") if bid_no.startswith("KOGAS-") else ""
+        if not code.strip():
+            raise ValueError(f"가스공사 bid_no 형식이 아님(KOGAS-{{NOTICE_CODE}}): {bid_no!r}")
+
+        async with create_client(timeout=15.0) as client:
+            resp = await client.get(DETAIL_URL, params={"notice_code": code, "bid_code": "001", "round": "01"})
+            resp.raise_for_status()
+        return _parse_detail(resp.content.decode("cp949", errors="replace"), code, bid_no)
+
     async def health_check(self) -> dict:
         start = time.time()
         try:
@@ -76,6 +102,63 @@ class KogasCollector(BaseCollector):
         except Exception as e:
             return {"status": "error", "source": self.source_name, "message": self._mask(str(e)),
                     "response_time_ms": int((time.time() - start) * 1000)}
+
+
+def _text(el) -> str:
+    return " ".join(el.get_text(" ", strip=True).replace("\xa0", " ").split())
+
+
+def _parse_detail(html: str, code: str, bid_no: str) -> dict:
+    """상세 HTML → fetch_detail 반환 dict. 항목 표는 `td.t_g`(항목명) 바로 다음 `td`(값) 쌍이다(2026-09-26 표본 26건)."""
+    if NOT_FOUND_TEXT in html:
+        raise ValueError(f"가스공사 상세 {bid_no}: 없는 공고(\"{NOT_FOUND_TEXT}\")")
+    soup = BeautifulSoup(html, "lxml")
+    detail: dict = {}
+    for label in soup.select("td.t_g"):
+        if label.find_parent("td", class_="c"):
+            continue  # 값 칸 안의 중첩 항목(면허 업종그룹 등) — 바깥 항목의 값에 이미 들어 있다
+        value_td = label.find_next_sibling("td")
+        key, value = _text(label), _text(value_td) if value_td else ""
+        if not key or not value:
+            continue
+        if key in detail:  # 표본엔 없었다 — 버리지 않고 모은다
+            prev = detail[key]
+            detail[key] = (prev if isinstance(prev, list) else [prev]) + [value]
+        else:
+            detail[key] = value
+
+    if detail.get("공고번호") != code or not detail.get("건명"):
+        raise ValueError(f"가스공사 상세 {bid_no}: 공고번호 칸={detail.get('공고번호')!r}·건명 없음 여부={not detail.get('건명')} "
+                         f"— 화면 개편 의심")
+    for key, selector in (("진행상태", "td.st_c"), ("진행안내", "td.st_t")):
+        if (el := soup.select_one(selector)) and (v := _text(el)):
+            detail[key] = v
+    if items := _item_rows(soup):
+        detail["품목내역"] = items
+    detail["content"] = ""
+    detail["attachments"] = [{"name": _text(a), "url": urljoin(SITE_ORIGIN, a["href"])}
+                             for a in soup.select("a[href]") if "/bid_download" in a["href"]]
+    return detail
+
+
+def _item_rows(soup) -> list[dict]:
+    """품목표(#itempanel) — 첫 행의 `td.t_c`가 열 제목(업무마다 열이 다르다 — 표본 3가지)."""
+    table = soup.select_one("#itempanel table")
+    if table is None:
+        return []
+    rows = table.find_all("tr")
+    headers = [_text(td) for td in rows[0].find_all("td")] if rows else []
+    out = []
+    for tr in rows[1:]:
+        cells = []
+        for td in tr.find_all("td"):  # 용역은 품목 아래 colspan 하위 행(서비스 내역)이 붙는다 — 병합 칸을 펼쳐 열을 맞춘다
+            cells += [_text(td)] + [""] * (int(td.get("colspan") or 1) - 1)
+        if len(cells) != len(headers):
+            raise ValueError(f"가스공사 품목표 열 수 불일치(제목 {len(headers)}·행 {len(cells)}) — 화면 개편 의심")
+        row = {h: c for h, c in zip(headers, cells) if c}
+        if row:
+            out.append(row)
+    return out
 
 
 def _item_to_notice(item) -> Notice:

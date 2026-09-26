@@ -1,6 +1,21 @@
-"""parse_date() 단위 테스트."""
+"""parse_date()·split_period() 단위 테스트."""
 
-from bid_collectors.utils.dates import parse_date
+from bid_collectors.utils.dates import parse_date, split_period
+
+
+class TestDotSpaceFormat:
+    """v1.6.0 — 보조금24 신청기한 "2026. 2. 1. ~ 2026. 11. 30."(점 뒤 공백). 종전엔 None(QA 실측 116건 중 5건)."""
+
+    def test_dot_space_single(self):
+        assert parse_date("2026. 2. 1.") == "2026-02-01"
+
+    def test_dot_space_period_end(self):
+        assert split_period("2026. 2. 1. ~ 2026. 11. 30.") == ("2026-02-01", "2026-11-30")
+        assert split_period("2026. 09. 21. ~ 2026. 10. 08.") == ("2026-09-21", "2026-10-08")
+
+    def test_period_end_without_year_is_none(self):
+        """뒤쪽에 연도가 없는 기간은 끝 날짜를 추측하지 않는다(원칙 ②)."""
+        assert split_period("2025. 3. 3. ~ 12. 5.")[1] is None
 
 
 class TestParseDateStandardFormats:

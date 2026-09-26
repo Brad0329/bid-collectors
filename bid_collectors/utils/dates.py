@@ -7,14 +7,15 @@ from datetime import datetime
 # 날짜 패턴 (우선순위 순)
 _PATTERNS = [
     # 기간 형식: 2024-03-28 ~ 2024-04-05 → 시작일 반환
+    # 구분자 뒤 공백 허용 — 보조금24 신청기한 "2026. 2. 1. ~ 2026. 11. 30."(v1.6.0 QA 실측 116건 중 5건이 None이었다)
     (
         re.compile(
-            r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\s*~\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})"
+            r"(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})\.?\s*~\s*(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})"
         ),
         "range",
     ),
-    # yyyy-MM-dd, yyyy.MM.dd, yyyy/MM/dd
-    (re.compile(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})"), "ymd"),
+    # yyyy-MM-dd, yyyy.MM.dd, yyyy/MM/dd, yyyy. M. d.
+    (re.compile(r"(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})"), "ymd"),
     # yyyyMMdd (8자리)
     (re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)"), "ymd_compact"),
     # yyyyMMddHHmm (12자리)

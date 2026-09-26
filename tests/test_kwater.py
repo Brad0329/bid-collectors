@@ -225,6 +225,18 @@ class TestFetchDetail:
         with pytest.raises(ValueError, match="atchflList가 list가 아님"):
             await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
 
+    @pytest.mark.parametrize("mutate, message", [
+        (lambda b: b["data"]["atchflList"][0].pop("docFileNm"), "docFileNm·atchflId 없음"),  # 이름 없는 첨부를 name=None으로 내보내지 않는다
+        (lambda b: b["data"].update(attachments=[1]), "표준 키와 겹침"),
+    ])
+    @respx.mock
+    async def test_malformed_attachment_or_key_clash_raises(self, mutate, message):
+        body = _detail_body()
+        mutate(body)
+        respx.post(DETAIL_API_URL).mock(return_value=httpx.Response(200, json=body))
+        with pytest.raises(ValueError, match=message):
+            await KwaterCollector(api_key="k").fetch_detail("KWATER-B1")
+
     @pytest.mark.parametrize("bad", ["B5202603349", "ALIO-1", "KWATER-", "KWATER-  "])
     @respx.mock
     async def test_bad_bid_no_raises_without_request(self, bad):

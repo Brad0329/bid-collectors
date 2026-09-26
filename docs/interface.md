@@ -126,6 +126,9 @@ class BaseCollector(ABC):
             {"attachments": [{"name": fileNm, "url": fileNo}, ...],  # 없으면 [] (None 아님)
              "content": str,                                          # bidDtl.content HTML 제거, 없으면 "" (실측상 늘 빈 값)
              ...data.bidDtl의 비어 있지 않은 필드 전부, 원래 이름}     # refrUrl·bidType·apbaId·ingStatus·totContAmt(0 포함)·bFiles …
+        - 기관 수집기 4종(v1.5.0): 알리오와 같은 모양 — 원천의 비어 있지 않은 필드 전부(0 포함, 값은 원문 그대로) +
+          `attachments: [{"name", "url"}]`(없으면 []) + `content`(넷 다 원천에 본문 필드가 없어 "" — 공고문은 첨부 hwp).
+          **실패·없는 공고는 예외**(자기 접두사가 아닌 bid_no는 요청 없이 `ValueError`). 아래 표 참조.
         - 나머지(나라장터·기업마당·보조금24·중소벤처기업부·GenericScraper)는 None.
         """
         ...
@@ -139,6 +142,21 @@ class BaseCollector(ABC):
         """
         ...
 ```
+
+### 기관 수집기 `fetch_detail` (v1.5.0)
+
+| 수집기 | 원천 · 호출 수 | 반환 키 | 없는 공고·고장 |
+|---|---|---|---|
+| `KwaterCollector` | 사이트 내부 JSON `POST ebid.kwater.or.kr/.../selectBidPblancDtl.do` · 1회 | `data.tndrPblanc` 필드(요청금액 `rqestAmt`·입찰방법·담당자 등)를 평탄화 + `data`의 나머지 필드 원문(입찰 일정 `tndrPrgsOrdrList`·`atchflList` 등). 첨부 name = `docFileNm` | `tndrPblanc` null(없는 번호도 `success`로 온다)·`code != success`·`atchflList` 형식 이상·첨부 이름/ID 없음·키 충돌 → `ValueError`, HTTP 오류 → `httpx.HTTPStatusError` |
+| `D2bCollector` | 공식 API 상세 5종 · 국내·국외경쟁 1회, **시설경쟁·국내수의·시설수의 2회**(목록 조회 1 + 상세 1 — 상세 필수 값이 bid_no에 없다) | 상세 `item` 필드 원래 이름(`estmPrce`·`scsbidLwltRt`·`areaLmttList`·`lcnsLmttList`·`lc` …, `^` 구분 문자열도 원문). `attachments == []`(첨부 필드 없음) | 결과 0건(없는 공고와 파라미터 불일치를 d2b가 같은 빈 응답으로 준다)·목록에서 행을 못 찾음·`resultCode != 00` → `ValueError`, HTTP 오류 → `RuntimeError`(키 가림) |
+| `KogasCollector` | 사이트 HTML `bid_detail_view_notice.jsp` · 1회 | **화면 항목명**(`추정가격`·`부가세`·`합계금액`·`계약방법`·`개찰일시`·`5. 업체제시문` …, 값은 공백 정리한 원문 — `()`·`~` 같은 빈 표기도 그대로) + `진행상태`·`진행안내`(취소는 안내 문구 "아래의 입찰이 취소되었습니다."에만) + `품목내역`(list[dict]). 첨부 = 페이지의 내려받기 링크 전부(공고 첨부 `bid_download_attfile` · 표준 계약조건 `bid_download_rule_proc` · 구매요청). 같은 항목명이 다시 나오면 값이 list(표본엔 없음) | "정보가 존재하지 않습니다"·공고번호 칸 불일치·건명 없음·첨부 절/첨부 표 링크 수 불일치 → `ValueError`, HTTP 오류(파라미터 오류 400 포함) → `httpx.HTTPStatusError` |
+| `LhCollector` | 사이트 HTML — 검색 1회(최신 차수·업무 코드) + 상세 1회 = 2회 | **`"표 이름/항목명"`**(`공고일반정보/추정가격`·`입찰진행정보/입찰서접수마감일시`·`투찰제한정보/참가지역1` …, 같은 키가 다시 나오면 list — 표본엔 없음) + 목록형 표 `요구면허`·`요구면허#2`·`파일정보`·`공고변경정보`(list[dict]) | 검색 결과 없음·공고번호 칸 ≠ `{번호} - {차수}`·건명 없음·파일정보 표 없음·첨부 링크 일부만 읽힘 → `ValueError`, HTTP 오류 → `httpx.HTTPStatusError`, TLS 검증 실패 → `httpx.ConnectError` |
+
+- **수자원·가스·LH는 공식 API가 아니라 기관 사이트 화면이다** — 사이트가 개편되면 깨지고, 그때는 빈 dict가 아니라 위 예외로 드러난다
+  (핵심 칸 대조 — 공고번호·건명). 소비자는 경고 로그 후 다음에 다시 시도하면 된다.
+- 한도: d2b는 오퍼레이션당 100회/일을 목록 수집(`collect`)과 **나눠 쓴다**(시설경쟁·수의 2종의 상세는 목록 오퍼레이션도 1회 쓴다). 사이트 3곳은 한도 없음(연속 20~46회 차단 없음, 실측).
+- 첨부 url은 그대로 GET하면 파일이 온다(세션·로그인 불필요, 2026-09-26 기관별 확인). **LH 첨부는 1GB가 넘는 것도 있다**(현장설명서 zip 1.2GB 실례) — 받을 거면 스트리밍으로.
+- LH(`ebid.lh.or.kr`)는 서버가 중간 인증서를 보내지 않아 패키지가 동봉한 중간 인증서로 검증한다(검증은 켜져 있다). 서버가 첨부를 직접 받을 때도 같은 문제가 있다(브라우저 링크는 문제없다) — 패키지 내부 `bid_collectors.lh.lh_ssl_context()`를 `verify=`로 쓸 수 있으나 **계약 밖**(공개 export 아님, 예고 없이 바뀔 수 있다).
 
 ### 나라장터 확장 메서드 (`NaraCollector`)
 
@@ -292,10 +310,10 @@ result = await scraper.collect(days=30)
 | `KstartupCollector` | `DATA_GO_KR_KEY` | K-Startup |
 | `SmesCollector` | `DATA_GO_KR_KEY` | 중소벤처기업부 |
 | `AlioCollector` | (없음) | 알리오 공공기관 입찰공고 — 공개 JSON, bid_no `ALIO-{seq}` (v1.2.0), `fetch_detail` 첨부·원문 링크 (v1.3.0) |
-| `LhCollector` | `DATA_GO_KR_KEY` | LH 입찰공고(15159012) — source `"LH"`, bid_no `LH-{bidNum}`(정정·취소는 같은 bid_no로 갱신) (v1.4.0) |
-| `KogasCollector` | `DATA_GO_KR_KEY` | 한국가스공사 입찰정보(15157366) — source `"가스공사"`, bid_no `KOGAS-{NOTICE_CODE}` (v1.4.0) |
-| `D2bCollector` | `DATA_GO_KR_KEY` | 국방전자조달 목록 5종(15158416) — source `"국방전자조달"`, bid_no `D2B-{국내경쟁·국외경쟁·시설경쟁·국내수의·시설수의}-{키}-{차수}`. 수의 2종은 진행 중 전량(공고일 필터 없음, start_date None) (v1.4.0) |
-| `KwaterCollector` | `DATA_GO_KR_KEY` | 한국수자원공사 입찰공고 4종(15101635) — source `"수자원공사"`, bid_no `KWATER-{tndrPbanno}` (v1.4.0) |
+| `LhCollector` | `DATA_GO_KR_KEY` | LH 입찰공고(15159012) — source `"LH"`, bid_no `LH-{bidNum}`(정정·취소는 같은 bid_no로 갱신) (v1.4.0), `fetch_detail` (v1.5.0) |
+| `KogasCollector` | `DATA_GO_KR_KEY` | 한국가스공사 입찰정보(15157366) — source `"가스공사"`, bid_no `KOGAS-{NOTICE_CODE}` (v1.4.0), `fetch_detail` (v1.5.0) |
+| `D2bCollector` | `DATA_GO_KR_KEY` | 국방전자조달 목록 5종(15158416) — source `"국방전자조달"`, bid_no `D2B-{국내경쟁·국외경쟁·시설경쟁·국내수의·시설수의}-{키}-{차수}`. 수의 2종은 진행 중 전량(공고일 필터 없음, start_date None) (v1.4.0), `fetch_detail` (v1.5.0) |
+| `KwaterCollector` | `DATA_GO_KR_KEY` | 한국수자원공사 입찰공고 4종(15101635) — source `"수자원공사"`, bid_no `KWATER-{tndrPbanno}` (v1.4.0), `fetch_detail` (v1.5.0) |
 | `GenericScraper` | (없음) | config만 필요 |
 
 - 기관 수집기 4종(v1.4.0) 공통: `budget`은 `None` — 추정가격·기초금액·설계가 등 금액은 `extra`에 원래 이름으로 있다(어느 것을 budget으로 볼지는 원칙 ② 결정 전).
@@ -307,7 +325,7 @@ result = await scraper.collect(days=30)
 
 ## 6. 버전 호환성
 
-- 이 인터페이스는 bid-collectors `v1.4.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
+- 이 인터페이스는 bid-collectors `v1.5.0` 기준 (변경 결정 기록: bid-collectors `docs/CONTRACT.md`)
 - Notice 모델에 필드 추가는 호환 (Optional 기본값)
 - 필드 제거/이름 변경은 메이저 버전 업 필요
 - BidWatch는 `extra` 필드로 새 데이터를 수용하므로, 수집기가 extra에 넣는 것은 자유

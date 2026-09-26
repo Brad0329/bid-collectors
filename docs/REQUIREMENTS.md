@@ -179,7 +179,7 @@
 
 ### F-008: 상세 조회 (`fetch_detail(bid_no)`)
 - **설명**: 목록 수집에 없는 정보를 공고 1건 단위로 보충한다. 결과 캐싱은 소비자 몫.
-  K-Startup(`cond[pbanc_sn::EQ]` 단건 조회 → content 전문 + 대상·신청방법 등 dict, 실패는 None)·알리오(v1.3.0 — 수용 기준은 F-010, 실패는 예외) 구현.
+  K-Startup(`cond[pbanc_sn::EQ]` 단건 조회 → content 전문 + 대상·신청방법 등 dict, 실패는 None)·알리오(v1.3.0 — 수용 기준은 F-010, 실패는 예외)·기관 수집기 4종(v1.5.0 — 수용 기준은 F-011~F-014와 '자체조달 기관 수집기 공통'의 fetch_detail 절, 실패는 예외) 구현.
   나라장터는 API가 단건 조회·사업개요를 지원하지 않아 None — 대신 수집 시점에 extra를 채운다(`work_log/Phase_003_detail.md`).
 - **수용 기준**:
   - [ ] K-Startup: 존재하는 bid_no면 content 전문이 든 dict, 없는 번호·오류면 None → 테스트 없음
@@ -249,9 +249,13 @@
 - **fetch_detail 공통 (v1.5.0, Phase 010)** — 계약 CONTRACT.md 2026-09-26 v1.5.0 행. 알리오(v1.3.0)와 같은 모양: 원천의 비어 있지 않은 필드 전부·원래 이름
   (0 포함, None·빈 문자열 제외, 값은 원문 그대로) + `attachments: [{"name","url"}]`(없으면 `[]`) + `content`(넷 다 원천에 본문 필드가 없어 `""`).
   실패·없는 공고는 예외. 수집 경로(`collect`)는 상세를 부르지 않는다. 기관별 기준은 각 절의 (v1.5.0) 항목.
-  - [ ] 4종 모두: 자기 접두사가 아닌 bid_no → 요청 없이 `ValueError` · HTTP 오류 → 예외 · 반환에 `attachments`(list)·`content`(str)가 늘 있다
-    → 수집기별 `TestFetchDetail::test_bad_bid_no_raises_without_request`·`test_http_error_raises`
-  - [ ] 실호출: 기관별 최근 공고 1건 이상 상세 → 예외 없음·원천 필드 수만큼 키·첨부 건수 == 원천 첨부 건수(d2b는 5종 각 1건) → `test_integration_institutions.py`
+  - [x] 4종 모두: 자기 접두사가 아닌 bid_no → 요청 없이 `ValueError` · HTTP 오류 → 예외 · 반환에 `attachments`(list)·`content`(str)가 늘 있다
+    → 수집기별 `TestFetchDetail::test_bad_bid_no_raises_without_request`·`test_http_error_raises`(d2b `test_http_error_raises_and_key_masked`)
+  - [x] 사이트 개편으로 첨부가 조용히 `[]`("조회함, 첨부 없음")가 되지 않는다 — 가스 첨부 절·첨부 표 링크 수 대조, LH 파일정보 표 필수, 수자원 첨부의 이름·ID 필수
+    (2026-09-26 spec-checker 지적) → 가스·LH `test_detail_layout_change_raises`·수자원 `test_malformed_attachment_or_key_clash_raises`
+  - [x] 실호출: 기관별 최근 공고 상세 → 예외 없음 · 키 대조(JSON·XML 원천 = 원문을 따로 받아 키 집합 일치 — 수자원·d2b 국내경쟁 / HTML 원천 = 공고번호·건명 칸 +
+    원문에서 따로 센 첨부 링크 수 — 가스·LH) · 첨부 건수 == 원천 첨부 건수 · d2b 5종 각 1건(30일 목록) · LH는 차수가 오른 공고 우선
+    → `test_integration_institutions.py` `test_*_fetch_detail_real` 4건(2026-09-26 통과)
 
 ### F-011: LH 입찰공고 수집 (`LhCollector`)
 - **설명**: `GET apis.data.go.kr/B552555/OpenBidInfoList/getOpenBidInfo`(15159012) — XML **EUC-KR**, 공고일(`tndrbidRegDt`) 범위 `tndrbidRegDtStart/End`,
@@ -265,13 +269,13 @@
   - [x] 업무 구분별 url 경로(4종 + 모르는 업무는 첫 화면) → `test_detail_url_by_job_type`
   - [x] (v1.5.0) fetch_detail: 검색(`BidMasterListCmd`, 날짜 칸 비움) 1회로 최신 차수·업무 코드(10 시설공사·20 용역·30 물품·40 지급자재)를 얻어
     그 업무의 상세 화면을 그 차수로 부른다 → `test_detail_uses_latest_degree_and_job_cmd`·`test_job_code_to_cmd`(3)
-  - [x] (v1.5.0) 항목형 표 → 키 `"표 이름/항목명"`(값 공백 정리·빈 값 제외), 목록형 표(요구면허·파일정보·공고변경정보) → `표 이름` list[dict],
+  - [x] (v1.5.0) 항목형 표 → 키 `"표 이름/항목명"`(값 공백 정리·빈 값 제외, 같은 키가 다시 나오면 list로 모음 — 표본엔 없음), 목록형 표(요구면허·파일정보·공고변경정보) → `표 이름` list[dict],
     같은 이름의 표는 `#2`, 깨진 `<tr/>` 행 보정, 파일정보 → attachments(url = `ebid.framework.download.dev` + filespec·공백 뺀 filename·savedname — 사이트 JS와 같게)
     → `test_detail_maps_tables_and_attachments`
   - [x] (v1.5.0) 검색 0건·다른 번호 행만·공고번호 칸이 `{번호} - {차수}`가 아님·건명 빈 값·표 이름 개편·첨부 링크를 다 못 읽음 → 예외
     → `test_detail_not_found_raises`(2)·`test_detail_layout_change_raises`(5)
   - [x] (v1.5.0) `ebid.lh.or.kr`는 동봉한 중간 인증서를 더해 검증한다(검증을 끄지 않는다), 동봉 인증서가 만료 90일 전까지 통과 → `test_lh_ssl_context`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010)
 
 ### F-012: 한국가스공사 입찰정보 수집 (`KogasCollector`)
 - **설명**: `GET apis.data.go.kr/B551210/bidInfoList2/getBidInfoList2`(15157366) — XML, 공고일(`NOTICE_DT`) 범위 `DOCDATE_START/END`.
@@ -281,11 +285,11 @@
 - **수용 기준**:
   - [x] 공통 기준 전부
   - [x] 요청에 `DOCDATE_START`·`DOCDATE_END`가 늘 들어간다 → `test_request_has_date_range`
-  - [x] (v1.5.0) fetch_detail: 상세 HTML(`bid_code=001&round=01`, EUC-KR/cp949) → 키 = 화면 항목명(공백 정리, 빈 값 제외·`()` 같은 빈 표기는 원문 그대로,
+  - [x] (v1.5.0) fetch_detail: 상세 HTML(`bid_code=001&round=01`, EUC-KR/cp949) → 키 = 화면 항목명(공백 정리, 빈 값 제외·`()` 같은 빈 표기는 원문 그대로, 같은 항목명이 다시 나오면 list — 표본엔 없음,
     다른 값 칸 안의 중첩 항목은 바깥 값에 포함) + `진행상태`·`진행안내`(취소는 안내 문구에만) + `품목내역`(열 제목을 키로 한 list[dict], colspan 하위 행은 칸을 펼쳐 맞춤) +
     attachments(내려받기 링크 전부·페이지 순서 — 공고 첨부·표준 계약조건·구매요청, url = 절대 주소) → `test_detail_maps_items_and_attachments`
   - [x] (v1.5.0) "정보가 존재하지 않습니다" 응답·공고번호 칸 ≠ 요청 번호·건명 없음·HTTP 400 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`(3)·`test_http_error_raises`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010)
 
 ### F-013: 국방전자조달(d2b) 입찰공고 수집 (`D2bCollector`)
 - **설명**: `apis.data.go.kr/1690000/BidPblancInfoService`(15158416) 목록 5종 — XML(JSON은 `dcsNo`가 int/str로 섞인다). 오퍼레이션당 100회/일.
@@ -307,7 +311,7 @@
   - [x] (v1.5.0) 상세 `item` 필드 전부·원래 이름(`^` 구분 문자열은 원문 그대로), `attachments == []`·`content == ""` → `test_detail_maps_item`
   - [x] (v1.5.0) 목록에서 행을 못 찾음(상세를 부르지 않음)·상세 item 0개(없는 번호와 틀린 파라미터가 같은 응답)·`resultCode` ≠ 00 → 예외, HTTP 오류는 키를 가리고 원 예외를 체인에 남기지 않음
     → `test_detail_not_found_raises`·`test_detail_lookup_miss_raises_without_detail_call`·`test_detail_error_code_raises`·`test_http_error_raises_and_key_masked`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010)
 
 ### F-014: 한국수자원공사 입찰공고 수집 (`KwaterCollector`)
 - **설명**: `apis.data.go.kr/B500001/ebid/tndr3/{cntrwkList,servcList,gdsList,dmscptList}`(15101635) — JSON, 날짜 필터는 **월 단위 `searchDt=YYYYMM`**(공고일 기준) 하나뿐 →
@@ -328,7 +332,7 @@
     → `test_detail_maps_fields_and_attachments`·`test_no_files_gives_empty_list`
   - [x] (v1.5.0) `message.code` ≠ success → 예외, success인데 `tndrPblanc`가 null(없는 번호도 success로 온다) → 예외, `atchflList`가 list 아님 → 예외
     → `test_detail_error_code_raises`·`test_detail_not_found_raises`·`test_malformed_raises`
-- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
+- **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 완료 (2026-09-26, v1.5.0 Phase 010)
 
 ## 비기능 요구사항
 1. **인증 방식**: 해당 없음 — 외부 입력 진입점이 없는 라이브러리(API 키는 호출자가 넘긴다).

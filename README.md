@@ -91,6 +91,10 @@ if detail:
 | NaraCollector | X (None) | API 단건 조회 미지원. 수집 시 extra에 상세 필드 포함 |
 | KstartupCollector | O | API 단건 필터 조회. 실패는 None |
 | AlioCollector | O | 첨부(`attachments`)·원문 링크(`refrUrl`) 등 상세 필드 원문 전부 (v1.3.0). 실패는 예외 |
+| KwaterCollector | O | 요청금액·입찰 일정·담당자·첨부 — 기관 사이트 내부 JSON(비공식) (v1.5.0). 실패는 예외 |
+| D2bCollector | O | 추정가격·낙찰하한율·지역/면허 제한 — 공식 상세 API, 시설경쟁·수의 2종은 2회 호출 (v1.5.0). 실패는 예외 |
+| KogasCollector | O | 추정가격·계약방법·진행순서·품목·첨부 — 기관 사이트 HTML(비공식), 키 = 화면 항목명 (v1.5.0). 실패는 예외 |
+| LhCollector | O | 공고부서·입찰방식·참가지역·첨부 — 기관 사이트 HTML(비공식) 2회 호출, 키 = `표 이름/항목명` (v1.5.0). 실패는 예외 |
 | 그 외 | X | None 반환 (미지원) |
 
 > **나라장터 참고**: data.go.kr API가 `bidNtceNo` 단건 조회를 지원하지 않으며,

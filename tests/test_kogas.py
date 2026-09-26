@@ -106,7 +106,9 @@ DETAIL_HTML = """<html><body>
 <tr><td class="c_c">00010</td><td class="c"><span title="양산관리소 UPS">양산관리소 UPS</span></td><td class="c r">1&nbsp;</td><td class="c_c">SET</td><td class="c r">105,600,000&nbsp;</td></tr>
 <tr><td class="c">서비스</td><td class="c" colspan="2">UPS 설치</td><td class="c r">&nbsp;</td><td class="c_c">5,000</td></tr>
 </table></div>
+<table><tr><td class="s_title">필요첨부파일</td></tr></table>
 <table id="tb_reqfile"><tr><td class="c"><a href="/supplier/bid/bid_download_rule_proc.jsp?rule_no=LDD0000013&ruleSeq=2">물품구매(제조)계약일반조건.zip</a></td></tr></table>
+<table><tr><td class="s_title">기타첨부파일</td></tr></table>
 <table id="tb_etcfile"><tr><td class="t_c">항목</td></tr>
 <tr><td class="c"><a href="/supplier/bid/bid_download_attfile.jsp?notice_code=2026092205&seq=23">입찰공고문.hwp</a></td></tr>
 <tr><td class="c"><a href="/supplier/bid/bid_download_attfile.jsp?notice_code=2026092205&seq=37">1. UPS 구매규격서.doc</a></td></tr>
@@ -158,6 +160,9 @@ class TestFetchDetail:
         DETAIL_HTML.replace(">2026092205</td>", ">2026092206</td>"),  # 다른 공고가 옴
         DETAIL_HTML.replace('class="t_g">건명', 'class="t_x">건명'),     # 화면 개편 — 건명 칸을 못 찾음
         "<html><body>점검 중입니다</body></html>",
+        # 첨부가 조용히 []가 되는 개편 — 링크 경로가 바뀜 / 첨부 절 제목이 바뀜
+        DETAIL_HTML.replace("/supplier/bid/bid_download_attfile.jsp", "/supplier/file/get.jsp"),
+        DETAIL_HTML.replace("필요첨부파일", "필요서류").replace("기타첨부파일", "기타서류"),
     ])
     @respx.mock
     async def test_detail_layout_change_raises(self, html):

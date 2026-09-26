@@ -138,6 +138,13 @@ def _parse_detail(html: str, code: str, bid_no: str) -> dict:
     detail["content"] = ""
     detail["attachments"] = [{"name": _text(a), "url": urljoin(SITE_ORIGIN, a["href"])}
                              for a in soup.select("a[href]") if "/bid_download" in a["href"]]
+    # 링크 경로·첨부 표가 바뀌면 첨부가 조용히 []("조회함, 첨부 없음")가 된다 — 첨부 절 제목과 첨부 표 안의 링크 수로 대조
+    if not any("첨부파일" in _text(t) for t in soup.select("td.s_title")):
+        raise ValueError(f"가스공사 상세 {bid_no}: 첨부파일 절 없음 — 화면 개편 의심")
+    table_links = [a for a in soup.select("table[id$=file] a[href]") if not a["href"].startswith("javascript")]
+    if len(table_links) != len(detail["attachments"]):
+        raise ValueError(f"가스공사 상세 {bid_no}: 첨부 표 링크 {len(table_links)}개 중 {len(detail['attachments'])}개만 읽음 "
+                         f"— 화면 개편 의심")
     return detail
 
 

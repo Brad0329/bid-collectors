@@ -237,6 +237,9 @@ def _parse_detail(html: str, bid_num: str, degree: str, bid_no: str) -> dict:
         # 없는 번호·틀린 차수도 200에 같은 화면 틀(번호 칸 "-", 건명 빈 값)이 온다 — 빈 dict로 넘기지 않는다
         raise ValueError(f"LH 상세 {bid_no}: 공고번호 칸={number!r}(기대 '{bid_num} - {degree}')·건명 "
                          f"{'있음' if detail.get('공고일반정보/입찰공고건명') else '없음'} — 화면 개편 또는 차수 불일치")
+    if not files_html:
+        # 표본 23건 모두 파일정보 표가 있었다 — 표 이름이 바뀌면 첨부가 조용히 []("조회함, 첨부 없음")가 되므로 예외로
+        raise ValueError(f"LH 상세 {bid_no}: 파일정보 표 없음 — 화면 개편 의심")
     links = _ATTACH.findall(files_html)
     if len(links) != files_html.count("fn_dds_open("):
         raise ValueError(f"LH 상세 {bid_no}: 첨부 링크 {files_html.count('fn_dds_open(')}개 중 {len(links)}개만 읽음 — 화면 개편 의심")

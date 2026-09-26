@@ -179,6 +179,10 @@ def _parse_detail(body, bid_no: str) -> dict:
     if clash := sorted(detail.keys() & rest.keys()):
         raise ValueError(f"수자원공사 상세 {bid_no}: tndrPblanc와 data 키 충돌 {clash} — 응답 형식 변경 의심")
     detail.update(rest)
+    if clash := sorted(detail.keys() & {"content", "attachments"}):
+        raise ValueError(f"수자원공사 상세 {bid_no}: 원문 필드가 표준 키와 겹침 {clash} — 응답 형식 변경 의심")
+    if unnamed := [f for f in files if not isinstance(f, dict) or not f.get("docFileNm") or not f.get("atchflId")]:
+        raise ValueError(f"수자원공사 상세 {bid_no}: 첨부 {len(unnamed)}건에 docFileNm·atchflId 없음 — 응답 형식 변경 의심")
     detail["content"] = ""
     detail["attachments"] = [
         {"name": f.get("docFileNm"),

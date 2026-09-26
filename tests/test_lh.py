@@ -209,6 +209,7 @@ class TestFetchDetail:
         DETAIL_HTML.replace("남양주별내 A-25BL\n   경계석 보수공사", ""),     # 건명 빈 값
         DETAIL_HTML.replace('summary="공고일반정보"', 'summary="기본정보"'),  # 화면 개편
         DETAIL_HTML.replace("'공고문.hwp')", "'공고's.hwp')"),             # 첨부 링크를 다 못 읽음
+        DETAIL_HTML.replace('summary="파일정보"', 'summary="첨부파일"'),    # 첨부가 조용히 []가 되는 개편
     ])
     @respx.mock
     async def test_detail_layout_change_raises(self, html):

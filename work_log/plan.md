@@ -165,7 +165,12 @@
   - 범위 밖: 수자원 사전규격·발주계획(공고번호 없음)·입찰결과, d2b 상세·품목명세, 한전 포털(키 미발급), 코레일(비공식)
   - 완료 조건: F-011~F-014 기준 `[x]` + 테스트 대응(변이 확인) · 전체 테스트 0 failed · 실측(표본 수) · BidWatch `backend/tests` 통과 · handover
 
-- [ ] Phase 010: v1.5.0 — 기관 수집기 4종 `fetch_detail` 수자원 → d2b → 가스공사 → LH (F-011~F-014·F-008) — **기능 추가(반환 None → dict, 시그니처·bid_no 불변) → minor 1.4.0 → 1.5.0**
+- [x] Phase 010: v1.5.0 — 기관 수집기 4종 `fetch_detail` 수자원 → d2b → 가스공사 → LH (F-011~F-014·F-008) — **기능 추가(반환 None → dict, 시그니처·bid_no 불변) → minor 1.4.0 → 1.5.0**
+  (2026-09-26 — 로그 없음(실패한 접근 없음 — 구현 중 발견 3건은 커밋 메시지: 가스 품목표 colspan·LH 같은 이름 표·spec-checker "첨부 조용히 []").
+  `7587bae`·`c885f52`·`b3391a2`·`5c80f7a`·`05c1037`·`8631bd9`·마감 커밋 · handover `docs/handover/v1.5.0.md` — 마감 전체 606 passed(실호출 포함)·ruff 통과·tools_tests 149 passed /
+  변이 48건 전부 잡힘(`scripts/_tmp/mutate_phase010.py`, 처음 안 잡힌 3건은 테스트 보강) / 실측 34건(수자원 8·d2b 10·가스 8·LH 8) + 저장 표본 가스 26·LH 23 파서 통과 +
+  첨부 url 실제 GET 3기관 + 고장 6건 예외 / qa-tester 합격(601 passed, 새 표본 24건·고장 12건) / spec-checker 지적 반영(첨부 조용히 [] 방지·통합 테스트 독립 대조·문서 5건) /
+  BidWatch `backend/tests` 134 passed(읽기·실행만))
   - 출처: bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_institution_fetch_detail.md`(2026-09-26), 조사 2026-09-26 researcher 4건(원문 `scripts/_tmp/{kwater,kogas,lh,d2b}_dtl/`),
     계약 CONTRACT.md 2026-09-26 v1.5.0 행(사용자 확인 — d2b 3종 목록 조회 후 상세 · LH TLS 중간 인증서 동봉).
   - 트랙: 일반(interface.md §2 변경 — 계약 게이트). 검증: 기관별 단위(사다리) + 실호출 통합 + 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(태그 v1.4.0).
@@ -215,6 +220,9 @@
 - 원칙 ② `status` 처리 방식(제거=major / 출처 명시값만 / BidWatch가 end_date로 계산) — REQUIREMENTS 미결 질문
 
 ## 사용자 실테스트 대기
+
+- **v1.5.0 기관 수집기 4종 fetch_detail(bidwatch 세션 몫)** — `docs/handover/v1.5.0.md`. `pip install -e`·팝업 표시(금액 이름별·일정·담당자·첨부)·
+  d2b 한도 공유·가스 표준 계약조건 첨부 구분·interface.md 교체. 반영 확인은 그 문서 §5.
 
 - **v1.4.0 자체조달 기관 수집기 4종(bidwatch 세션 몫)** — `docs/handover/v1.4.0.md`. 출처 등록(스키마 게이트)·bidwatch 키 활용신청·금액 이름별 표시(`-`)·
   interface.md 교체·`pip install -e`. 반영 확인은 그 문서 §5.

@@ -74,7 +74,8 @@ ROOT = Path(__file__).resolve().parents[1]
 #   냈다(kanadic 2026-08-19). 원인 분류가 통째로 뒤집히는 자리라 테스트가 두 형태를 다 검사한다.
 
 
-def _repo_cd_pattern(root: Path) -> str:
+def _repo_path_pattern(root: Path) -> str:
+    """저장소 루트 경로(따옴표·끝 구분자 허용) — cd·git -C 판정이 같이 쓴다."""
     comps = [c for c in re.split(r"[\\/]+", str(root)) if c]
     first = comps[0]
     if re.fullmatch(r"[A-Za-z]:", first):  # Windows 드라이브 문자 — 대소문자 모두 받는다
@@ -84,7 +85,11 @@ def _repo_cd_pattern(root: Path) -> str:
     else:
         head = re.escape(first)
     body = "[\\\\/]".join(re.escape(c) for c in comps[1:])
-    return rf"""^\s*cd\s+["']?{head}[\\/]{body}[\\/]?["']?"""
+    return rf"""["']?{head}[\\/]{body}[\\/]?["']?"""
+
+
+def _repo_cd_pattern(root: Path) -> str:
+    return rf"^\s*cd\s+{_repo_path_pattern(root)}"
 
 
 _REPO_CD = _repo_cd_pattern(ROOT)
@@ -94,6 +99,10 @@ REDUNDANT_CD_SEGMENT = re.compile(_REPO_CD + _REDIRECTS + r"\s*$")
 # 뒤에 `&&`·`;`가 오거나, **구분자 없이 바로 다른 낱말**이 오는 형태(`cd <루트> ls` — bash는
 # "too many arguments"로 죽어 ls는 돌지도 않는다. vanasso.kr 2026-09-06: 99건 통과).
 REDUNDANT_CD_COMMAND = re.compile(_REPO_CD + _REDIRECTS + r"(?:\s*(?:&&|;)|\s+\S)")
+# **쓰는** `git -C <루트> add …` — cd와 같은 원인(작업 디렉토리가 이미 루트)인데 `git add *` 규칙을 벗어나 확인 창을 만든다
+# (bid-collectors 2026-09-26: 2회, 311초·25초). 루트 아래 하위 디렉토리·다른 저장소는 대상이 아니다.
+# **읽는** git(status·log·diff·show)의 `-C`는 막지 않는다 — cwd 드리프트 확인용(노하우_승인_대기_최소화.md [H13]).
+REDUNDANT_GIT_C = re.compile(rf"^\s*git\s+-C\s+{_repo_path_pattern(ROOT)}\s+(?:add|commit|mv|restore)\b")
 
 # ── 원인 ② 읽기 전용 ────────────────────────────────────────────────────────
 # 상태를 바꾸지 않는 명령만. **여기 없는 것은 자동 제안하지 않는다**(모르면 안 여는 쪽).

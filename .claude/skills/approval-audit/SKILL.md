@@ -74,8 +74,9 @@ python scripts/measure_approvals.py
 
 - 규칙: **`.claude/settings.local.json`의 `permissions.allow`에만** 넣는다 — `settings.json`의
   `allow`는 이 환경에서 효력이 없다(실측). 패턴에 역슬래시를 쓰지 않는다(슬래시 경로).
-- 훅: 동봉 차단 훅은 **최대 5종**(`no_redundant_cd`·`no_output_filter`·`no_inline_python`·
-  `no_scratchpad_path` + 선택형 `no_targeted_flutter_test` — Flutter가 아니면 초기화 때 지운다).
+- 훅: 동봉 차단 훅은 **최대 5종**(`no_redundant_cd`(루트 대상 쓰는 `git -C` 포함)·`no_output_filter`·`no_inline_python`·
+  `no_scratchpad_path` + 선택형 `no_targeted_flutter_test` — Flutter가 아니면 초기화 때 지운다.
+  bid-collectors는 Flutter 자리에 `no_shell_file_write`(셸 `cat >`·`sed -i` 파일 쓰기, 2026-09-26)를 둔다).
   `session_context`는 차단이 아니라 SessionStart 주입 훅이라 이 점검 대상이 아니다. **개수를 외우지 말고
   `.claude/hooks/`의 실제 파일과 settings.json 등록 항목을 대조한다.** 등록은 **matcher
   `Bash|PowerShell` 한 블록**에 모아 둔다 — **한쪽 셸에만 걸면 반대쪽으로 그대로

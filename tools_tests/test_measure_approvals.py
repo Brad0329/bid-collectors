@@ -25,7 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from measure_approvals import (  # noqa: E402
-    REDUNDANT_CD_COMMAND, REDUNDANT_CD_SEGMENT, ROOT, allowed, classify, head_command,
+    REDUNDANT_CD_COMMAND, REDUNDANT_CD_SEGMENT, REDUNDANT_GIT_C, ROOT, allowed, classify, head_command,
     is_readonly, split_segments,
 )
 
@@ -93,6 +93,31 @@ def test_명령_전체에서_불필요한_cd를_잡는다(command):
 ])
 def test_정당한_cd와_일반_명령은_안_잡는다(command):
     assert not REDUNDANT_CD_COMMAND.match(command)
+
+
+@pytest.mark.parametrize("command", [
+    # bid-collectors 2026-09-26 실측 311초·25초 — `git add *` 규칙이 있는데 -C 때문에 물었다
+    f"git -C {REPO_MSYS} add CLAUDE.md docs/CONTRACT.md",
+    f"git -C {REPO} add docs/handover/v1.4.0.md && git -C {REPO} commit -q -F .commit_msg.txt",
+    f'git -C "{REPO_BS}" commit -F .commit_msg.txt',
+    f"git -C {REPO}/ mv a b",
+])
+def test_루트를_가리키는_쓰기_git_C를_잡는다(command):
+    assert REDUNDANT_GIT_C.match(command)
+
+
+@pytest.mark.parametrize("command", [
+    "git add docs/x.md",                          # 권장 형태
+    f"git -C {REPO} status --short",              # 읽는 git — cwd 드리프트 확인용으로 둔다([H13])
+    f"git -C {REPO_MSYS} diff docs/handover/v1.4.0.md",
+    f"git -C {REPO} addendum",                    # add로 시작하는 다른 낱말
+    f"git -C {REPO}/scripts status",              # 루트 아래 하위 — 대상이 아니다
+    f"git -C {REPO}-other status",                # 이름이 루트로 시작하는 다른 저장소
+    "git -C C:/Users/user/Documents/bidwatch log --oneline -1",   # 다른 저장소
+    f"echo git -C {REPO} add x",                  # git이 명령 머리가 아니다
+])
+def test_정당한_git_C와_일반_명령은_안_잡는다(command):
+    assert not REDUNDANT_GIT_C.match(command)
 
 
 def test_조각용_패턴도_리다이렉트_변형과_MSYS_경로를_잡는다():

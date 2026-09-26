@@ -31,9 +31,11 @@ import sys
 from hook_io import deny, read_command
 
 # `python`/`python3`/`py` 뒤에 (다른 플래그가 끼어도) `-c`가 오는 형태.
-# 앞은 줄머리 또는 공백·파이프·세미콜론 뒤여야 한다 — 다른 낱말의 꼬리에 걸리지 않게.
+# 앞은 줄머리 또는 공백·파이프·세미콜론 뒤, 또는 **경로 구분자 뒤**(`.venv/Scripts/python.exe -c`)여야 한다 —
+# 다른 낱말의 꼬리에 걸리지 않게. 경로 구분자는 bid-collectors 2026-09-26 `/approval-audit`에서 추가:
+# 이 프로젝트는 늘 `.venv/Scripts/python.exe`로 부르는데 앞이 `/`라 훅을 그대로 통과해 확인 창(150초)을 만들었다.
 INLINE_PYTHON = re.compile(
-    r"(?:^|[\s|;&])(?:python3?|py)(?:\.exe)?\s+(?:-[A-Za-z]+\s+)*-c(?:\s|$)",
+    r"(?:^|[\s|;&/\\])(?:python3?|py)(?:\.exe)?\s+(?:-[A-Za-z]+\s+)*-c(?:\s|$)",
     re.IGNORECASE,
 )
 

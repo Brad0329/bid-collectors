@@ -35,12 +35,18 @@ REASON = (
     "  → `cd ...&&` 를 떼고 명령만 그대로 부를 것.\n"
     "  (하위 디렉토리로 가야 하면 `cd <dir>`를 **단독 호출**로 하고 끝나면 `cd ..`로 돌아온다.)"
 )
+GIT_C_REASON = (
+    "작업 디렉토리는 이미 저장소 루트다 — 쓰는 `git -C <루트> add/commit/mv/restore`의 `-C`는 하는 일이 없다.\n"
+    "  그런데 `-C <경로>`가 끼면 `git add *`·`git commit -F …` 같은 허용 규칙에서 벗어나 **매번 승인을 묻는다**\n"
+    "  (bid-collectors 2026-09-26 실측: 311초·25초).\n"
+    "  → `-C <루트>`를 떼고 `git add …`처럼 그대로 부를 것."
+)
 
 
 def main() -> int:
     try:
         sys.path.insert(0, str(ROOT / "scripts"))
-        from measure_approvals import REDUNDANT_CD_COMMAND
+        from measure_approvals import REDUNDANT_CD_COMMAND, REDUNDANT_GIT_C
     except Exception as e:
         # 패턴 소스를 못 읽었다고 도구를 막지 않는다. 조용히 통과시키되 이유를 남긴다.
         print(f"no_redundant_cd: 패턴 import 실패로 통과시킨다 ({e})", file=sys.stderr)
@@ -51,6 +57,8 @@ def main() -> int:
         return 0
     if REDUNDANT_CD_COMMAND.match(command):
         deny(REASON)
+    elif REDUNDANT_GIT_C.match(command):
+        deny(GIT_C_REASON)
     return 0
 
 

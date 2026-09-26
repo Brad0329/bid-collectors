@@ -36,6 +36,10 @@ from no_inline_python import blocked  # noqa: E402
     "python -u -c \"print(1)\"",          # 다른 플래그가 끼어도
     "PYTHON -C \"print(1)\"",             # PowerShell은 대소문자를 안 가린다
     "git log --oneline -1; python -c \"print(1)\"",   # 앞에 뭐가 붙어도
+    # bid-collectors 2026-09-26 실측 150초 — 경로로 부른 인터프리터(앞이 `/`)가 통과하던 구멍
+    ".venv/Scripts/python.exe -c \"import re,sys;print(1)\"",
+    "C:/Users/user/Documents/bidwatch/backend/.venv/Scripts/python.exe -c \"import bid_collectors\"",
+    "C:\\venv\\Scripts\\python.exe -c \"print(1)\"",
 ])
 def test_인라인_파이썬을_막는다(command):
     assert blocked(command)
@@ -55,6 +59,9 @@ def test_인라인_파이썬을_막는다(command):
     "sort -c list.txt",
     "flutter test",
     "echo 'python -c'",                               # 낱말로만 등장 — 실행이 아니다
+    ".venv/Scripts/python.exe scripts/_tmp/probe.py -c x",   # 경로 인터프리터 + 스크립트의 인자 -c
+    ".venv/Scripts/python.exe -m pytest tests -q",
+    "cat scripts/mypy.cfg",                           # 경로 안의 py로 끝나는 낱말
 ])
 def test_정상_호출은_막지_않는다(command):
     assert not blocked(command)

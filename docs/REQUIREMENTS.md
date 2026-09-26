@@ -263,12 +263,14 @@
   - [x] `resultCode 03` → 0건·errors 없음 → `test_nodata_is_empty_not_error`
   - [x] EUC-KR 바이트 응답의 한글 제목이 깨지지 않는다 → `test_euc_kr_response`
   - [x] 업무 구분별 url 경로(3종 + 물품 목록 화면) → `test_detail_url_by_job_type`
-  - [ ] (v1.5.0) fetch_detail: 검색(`BidMasterListCmd`, 날짜 칸 비움) 1회로 최신 차수·업무 코드(10 시설공사·20 용역·30 물품·40 지급자재)를 얻어
-    그 업무의 상세 화면을 그 차수로 부른다 → `test_detail_uses_latest_degree_and_job_cmd`
-  - [ ] (v1.5.0) 상세 표 → 키 `"표 이름/항목명"`(값 공백 정리), 파일정보 표 → attachments(url = `ebid.framework.download.dev` + filespec·filename·savedname)
+  - [x] (v1.5.0) fetch_detail: 검색(`BidMasterListCmd`, 날짜 칸 비움) 1회로 최신 차수·업무 코드(10 시설공사·20 용역·30 물품·40 지급자재)를 얻어
+    그 업무의 상세 화면을 그 차수로 부른다 → `test_detail_uses_latest_degree_and_job_cmd`·`test_job_code_to_cmd`(3)
+  - [x] (v1.5.0) 항목형 표 → 키 `"표 이름/항목명"`(값 공백 정리·빈 값 제외), 목록형 표(요구면허·파일정보·공고변경정보) → `표 이름` list[dict],
+    같은 이름의 표는 `#2`, 깨진 `<tr/>` 행 보정, 파일정보 → attachments(url = `ebid.framework.download.dev` + filespec·공백 뺀 filename·savedname — 사이트 JS와 같게)
     → `test_detail_maps_tables_and_attachments`
-  - [ ] (v1.5.0) 검색 0건·공고번호 칸이 `NNNNNNN - NN`이 아님·건명 빈 값 → 예외 → `test_detail_not_found_raises`·`test_detail_layout_change_raises`
-  - [ ] (v1.5.0) `ebid.lh.or.kr`는 동봉한 중간 인증서를 더해 검증한다(검증을 끄지 않는다), 동봉 인증서가 만료 전 → `test_lh_ssl_context`
+  - [x] (v1.5.0) 검색 0건·다른 번호 행만·공고번호 칸이 `{번호} - {차수}`가 아님·건명 빈 값·표 이름 개편·첨부 링크를 다 못 읽음 → 예외
+    → `test_detail_not_found_raises`(2)·`test_detail_layout_change_raises`(5)
+  - [x] (v1.5.0) `ebid.lh.or.kr`는 동봉한 중간 인증서를 더해 검증한다(검증을 끄지 않는다), 동봉 인증서가 만료 90일 전까지 통과 → `test_lh_ssl_context`
 - **상태**: 완료 (2026-09-26, v1.4.0 Phase 009) / fetch_detail 진행(Phase 010)
 
 ### F-012: 한국가스공사 입찰정보 수집 (`KogasCollector`)

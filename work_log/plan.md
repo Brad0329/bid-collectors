@@ -283,7 +283,7 @@
   - **d2b 목록 API 누락 의심** — researcher 실측: 사이트 첫 화면의 용역 `UMM0913`(건설사업관리용역, 공고일 2026-09-23)이 collect(days=7) 418건에 없다. 어느 목록 오퍼레이션에 있어야 하는지 미확인.
   - **d2b 2차수 공고 fetch_detail "결과 없음"**(handover v1.5.0 §5 ② bidwatch 제보 `D2B-국내경쟁-2026LCH006737411-2`) — 상세 파라미터 확인 대기.
   - 나라장터 낙찰 organization = 수요기관 `dminsttNm`, 입찰공고는 공고기관 `ntceInsttNm` — 같은 이름 칸에 다른 의미인지 미확인(낙찰 응답에 `ntceInsttNm`이 있는지부터).
-  - 조사 agent의 절차 이탈(Phase 011 d2b 실측): Write 도구가 없어 `python -` stdin 인라인 3회 — researcher 정의에 Write가 없다. 일회성 스크립트를 쓰는 조사면 도구 목록을 다시 볼 것.
+  - 조사 agent의 절차 이탈(Phase 011 d2b 실측): Write 도구가 없어 `python -` stdin 인라인 3회 — researcher 정의에 Write가 없다. → **2026-09-27 해소**: researcher·qa-tester에 Write(`scripts/_tmp/` 일회성 전용) 부여(사용자 결정, 노하우 `[H16]`). 다음 조사에서 인라인이 사라졌는지 본다.
 
 - **(approval-audit 2026-09-26, `8938593`) 다음 Phase 끝에 효과 확인** — 새 훅 `no_shell_file_write`·루트 `git -C` 쓰기 차단은 습관 교정이라
   이 세션에서 전후 비교가 안 됐다. 다음 `/approval-audit`에서 `python scripts/measure_wait.py --grep "cat >>"`·`--grep "git -C"`로 0건인지,

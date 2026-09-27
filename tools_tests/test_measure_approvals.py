@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -25,8 +26,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from measure_approvals import (  # noqa: E402
-    REDUNDANT_CD_COMMAND, REDUNDANT_CD_SEGMENT, REDUNDANT_GIT_C, ROOT, allowed, classify, head_command,
-    is_readonly, split_segments,
+    REDUNDANT_CD_COMMAND, REDUNDANT_CD_SEGMENT, REDUNDANT_GIT_C, ROOT, allowed, classify, find_sessions,
+    head_command, is_readonly, shell_calls, split_segments,
 )
 
 REPO = str(ROOT).replace("\\", "/")   # 슬래시형 경로
@@ -101,23 +102,25 @@ def test_정당한_cd와_일반_명령은_안_잡는다(command):
     f"git -C {REPO} add docs/handover/v1.4.0.md && git -C {REPO} commit -q -F .commit_msg.txt",
     f'git -C "{REPO_BS}" commit -F .commit_msg.txt',
     f"git -C {REPO}/ mv a b",
+    # ★ 2026-09-27 정정 — 읽는 -C도 잡는다(19,833초 1건이 읽는 diff였다. [H16])
+    f"git -C {REPO} status --short",
+    f"git -C {REPO_MSYS} diff docs/handover/v1.4.0.md",
+    f"ls; git -C {REPO} log --oneline -3",        # 앞에 무엇이 붙어도
 ])
-def test_루트를_가리키는_쓰기_git_C를_잡는다(command):
-    assert REDUNDANT_GIT_C.match(command)
+def test_루트를_가리키는_git_C를_읽기_쓰기_모두_잡는다(command):
+    assert REDUNDANT_GIT_C.search(command)
 
 
 @pytest.mark.parametrize("command", [
     "git add docs/x.md",                          # 권장 형태
-    f"git -C {REPO} status --short",              # 읽는 git — cwd 드리프트 확인용으로 둔다([H13])
-    f"git -C {REPO_MSYS} diff docs/handover/v1.4.0.md",
-    f"git -C {REPO} addendum",                    # add로 시작하는 다른 낱말
-    f"git -C {REPO}/scripts status",              # 루트 아래 하위 — 대상이 아니다
+    "git status --short",                         # 드리프트 확인은 맨몸으로 된다
+    f"git -C {REPO}/scripts status",              # 루트 아래 하위 — 재본 적 없다(YAGNI)
     f"git -C {REPO}-other status",                # 이름이 루트로 시작하는 다른 저장소
     "git -C C:/Users/user/Documents/bidwatch log --oneline -1",   # 다른 저장소
-    f"echo git -C {REPO} add x",                  # git이 명령 머리가 아니다
+    "git -C /c/Users/user/Documents/bidwatch diff --stat",
 ])
 def test_정당한_git_C와_일반_명령은_안_잡는다(command):
-    assert not REDUNDANT_GIT_C.match(command)
+    assert not REDUNDANT_GIT_C.search(command)
 
 
 def test_조각용_패턴도_리다이렉트_변형과_MSYS_경로를_잡는다():
@@ -173,9 +176,33 @@ def test_리다이렉트와_fd복제를_구분한다():
     ("grep -n x y", "읽기전용"),
     ("rm x", "상태변경"),
     ("flutter test", "판단필요"),
+    (f"git -C {REPO} diff --stat", "형태"),                        # 루트를 가리키는 -C는 습관
+    ("git -C /c/Users/user/Documents/other-repo diff", "판단필요"),   # 다른 저장소는 습관이 아니다
 ])
 def test_원인을_갈라_분류한다(segment, kind):
     assert classify(segment) == kind
+
+
+# ── ⑥ 서브에이전트 기록도 센다 ──────────────────────────────────────────────
+
+def _tool_use(command: str) -> str:
+    return json.dumps({"message": {"content": [
+        {"type": "tool_use", "id": command, "name": "Bash", "input": {"command": command}}]}})
+
+
+def test_서브에이전트_기록까지_합쳐_센다(tmp_path, monkeypatch):
+    """★ bid-collectors 2026-09-26: 8초 초과 셸 호출의 57%가 서브에이전트였는데 본 세션만 셌다.
+    `<세션ID>/subagents/*.jsonl`을 안 보면 조사·QA를 맡긴 쪽의 대기가 보고서에서 통째로 빠진다."""
+    (tmp_path / "s1.jsonl").write_text(_tool_use("git status") + "\n", encoding="utf-8")
+    sub = tmp_path / "s1" / "subagents"
+    sub.mkdir(parents=True)
+    (sub / "agent-a.jsonl").write_text(_tool_use("cat >> x <<EOF") + "\n", encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_TRANSCRIPT_DIR", str(tmp_path))
+
+    paths = find_sessions(None, 1)
+    assert [p.name for p in paths] == ["s1.jsonl", "agent-a.jsonl"]
+    assert [c for _, c in shell_calls(paths)] == ["git status", "cat >> x <<EOF"]
+    assert find_sessions("s1", 1) == paths               # 세션 ID로 골라도 같다
 
 
 # ── ⑤ 규칙 매칭: 접두사 의미 ────────────────────────────────────────────────

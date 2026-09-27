@@ -99,10 +99,12 @@ REDUNDANT_CD_SEGMENT = re.compile(_REPO_CD + _REDIRECTS + r"\s*$")
 # 뒤에 `&&`·`;`가 오거나, **구분자 없이 바로 다른 낱말**이 오는 형태(`cd <루트> ls` — bash는
 # "too many arguments"로 죽어 ls는 돌지도 않는다. vanasso.kr 2026-09-06: 99건 통과).
 REDUNDANT_CD_COMMAND = re.compile(_REPO_CD + _REDIRECTS + r"(?:\s*(?:&&|;)|\s+\S)")
-# **쓰는** `git -C <루트> add …` — cd와 같은 원인(작업 디렉토리가 이미 루트)인데 `git add *` 규칙을 벗어나 확인 창을 만든다
-# (bid-collectors 2026-09-26: 2회, 311초·25초). 루트 아래 하위 디렉토리·다른 저장소는 대상이 아니다.
-# **읽는** git(status·log·diff·show)의 `-C`는 막지 않는다 — cwd 드리프트 확인용(노하우_승인_대기_최소화.md [H13]).
-REDUNDANT_GIT_C = re.compile(rf"^\s*git\s+-C\s+{_repo_path_pattern(ROOT)}\s+(?:add|commit|mv|restore)\b")
+# `git -C <저장소 루트> …`(읽기·쓰기 모두) — cd와 같은 부류다. 이미 루트에 있으니 하는 일이 없는데,
+# `git diff*`·`git add *`류 규칙은 `git -C …`에 안 걸려 매번 묻는다(bid-collectors 2026-09-26: 셸 72건,
+# 읽는 `git -C <루트> diff` 1건이 19,833초). 다른 저장소를 가리키는 `-C`는 정당하다 — 루트 **정확히**일 때만
+# 잡는다(뒤에 공백·끝). ★ 2026-09-27 정정: 예전엔 읽는 -C를 드리프트 확인용으로 규칙에 열었지만([H13]),
+# 표기(C:/·/c/·역슬래시·따옴표)마다 규칙이 따로 필요해 새 표기로 빠져나갔다. 드리프트 확인은 맨몸 `git status`로 된다([H16]).
+REDUNDANT_GIT_C = re.compile(r"(?:^|[\s;&|(])git\s+-C\s+" + _repo_path_pattern(ROOT) + r"(?=\s|$)")
 
 # ── 원인 ② 읽기 전용 ────────────────────────────────────────────────────────
 # 상태를 바꾸지 않는 명령만. **여기 없는 것은 자동 제안하지 않는다**(모르면 안 여는 쪽).
@@ -161,15 +163,30 @@ def transcript_dir() -> Path:
     return Path.home() / ".claude" / "projects" / slug
 
 
+def with_subagents(mains: list[Path]) -> list[Path]:
+    """본 세션마다 그 세션이 띄운 서브에이전트 기록(`<세션ID>/subagents/*.jsonl`)을 붙인다.
+
+    ★ 서브에이전트는 본 세션 파일에 호출이 안 남는다. 본 세션만 세면 **조사·QA를 맡긴 쪽의 대기를
+      통째로 놓친다** — bid-collectors 2026-09-26 실측: 42개 기록 중 8초 초과 셸 호출 340건의
+      57%(194건)가 서브에이전트였고, 최대 원인(`cat >>` 126건)도 거기 있었다.
+    """
+    out: list[Path] = []
+    for m in mains:
+        out.append(m)
+        out.extend(sorted((m.parent / m.stem / "subagents").glob("*.jsonl")))
+    return out
+
+
 def find_sessions(spec: str | None, count: int) -> list[Path]:
+    """본 세션 + 그 서브에이전트 기록. 첫 원소부터 본 세션 순서대로."""
     d = transcript_dir()
     if spec:
         p = Path(spec)
         if p.exists():
-            return [p]
+            return with_subagents([p])
         p = d / f"{spec}.jsonl"
         if p.exists():
-            return [p]
+            return with_subagents([p])
         raise SystemExit(f"세션을 찾지 못했다: {spec}\n  찾아본 곳: {d}")
     if not d.exists():
         raise SystemExit(
@@ -178,7 +195,19 @@ def find_sessions(spec: str | None, count: int) -> list[Path]:
     files = sorted(d.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not files:
         raise SystemExit(f"세션 파일(.jsonl)이 없다: {d}")
-    return files[:count]
+    return with_subagents(files[:count])
+
+
+def print_sessions(paths: list[Path]) -> None:
+    """[대상 세션] — 본 세션은 한 줄씩, 서브에이전트는 세션별 개수로(측정기 2종이 같이 쓴다)."""
+    print("[대상 세션]")
+    for p in paths:
+        if p.parent.name == "subagents":
+            continue
+        subs = [s for s in paths if s.parent == p.parent / p.stem / "subagents"]
+        size = sum(s.stat().st_size for s in subs)
+        extra = f" + 서브에이전트 {len(subs)}개 ({size / 1e6:.1f} MB)" if subs else ""
+        print(f"  {p.name}  ({p.stat().st_size / 1e6:.1f} MB){extra}")
 
 
 def shell_calls(paths: list[Path]) -> list[tuple[str, str]]:
@@ -332,7 +361,7 @@ def is_readonly(segment: str) -> bool:
 
 
 def classify(segment: str) -> str:
-    if segment.startswith("cd "):
+    if segment.startswith("cd ") or REDUNDANT_GIT_C.search(segment):
         return "형태"
     if head_command(segment) in SHELL_KEYWORDS:
         return "셸제어문"
@@ -405,9 +434,7 @@ def main() -> int:
     paths = find_sessions(args.session, args.sessions)
     calls = shell_calls(paths)
 
-    print("[대상 세션]")
-    for p in paths:
-        print(f"  {p.name}  ({p.stat().st_size / 1e6:.1f} MB)")
+    print_sessions(paths)
 
     if not calls:
         # 0건은 '깨끗함'이 아니다 — 파싱이 깨졌거나 엉뚱한 파일을 봤다는 뜻이다.

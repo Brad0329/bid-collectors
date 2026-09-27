@@ -288,6 +288,8 @@
 - **(approval-audit 2026-09-26, `8938593`) 다음 Phase 끝에 효과 확인** — 새 훅 `no_shell_file_write`·루트 `git -C` 쓰기 차단은 습관 교정이라
   이 세션에서 전후 비교가 안 됐다. 다음 `/approval-audit`에서 `python scripts/measure_wait.py --grep "cat >>"`·`--grep "git -C"`로 0건인지,
   그리고 훅에 막혀 Edit로 돌아간 흐름이 느려지지 않았는지 본다(bidwatch pytest 규칙은 이미 재검증: 290s → 34.5s).
+  **2026-09-27 추가**(노하우 `[H16]` — 측정기가 이제 서브에이전트까지 센다): `--grep "cd "`(어느 디렉토리든 `cd X && …` 복합 차단)·
+  `--grep "git -C"`(루트 대상 **읽기 포함** 차단)도 0건인지, `/c/…/bidwatch/…/python.exe -m pytest`(MSYS 규칙 추가)가 안 묻는지 본다.
 
 - **debt-audit 2026-09-24 (5afbc99 반영본)** — 1군(GenericScraper 정렬 가정·헛통과 테스트·공통 계약 테스트)은 Phase 005에 흡수(위 4~6). 나머지는 **결정 대기**:
   - 실측 필요: **기업마당 정렬 가정**(`bizinfo.py:81-84` "마지막 3건 전부 오래됨"에서 멈춤 — 5afbc99와 같은 유형, 실제 목록 순서 역전 수 미측정) ·

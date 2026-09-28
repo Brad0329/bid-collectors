@@ -34,13 +34,29 @@ except (AttributeError, ValueError):
     pass
 
 
-def read_command(hook_name: str) -> str | None:
-    """훅 입력에서 명령 문자열을 꺼낸다. 못 읽으면 None (= 막지 말고 통과)."""
+def read_input(hook_name: str) -> dict | None:
+    """훅 입력 JSON 전체. 못 읽으면 None (= 막지 말고 통과).
+
+    ★ stdin은 **바이트로 읽어 UTF-8로 디코드한다** — `json.load(sys.stdin)`을 쓰지 말 것.
+    하네스는 한글을 이스케이프하지 않은 UTF-8 바이트로 보내는데, Windows 파이썬은 파이프 stdin을
+    콘솔 인코딩(cp949)으로 읽는다. 그러면 한글이 든 명령은 바이트 조합에 따라 디코드가 **깨지거나 운 좋게
+    통과**한다 — 깨지면 None이라 **막아야 할 명령을 조용히 통과**시킨다(2026-09-28 템플릿 691da5c 실측).
+    위 docstring의 cp949 사고는 출력 쪽, 이것은 입력 쪽의 같은 뿌리다.
+    UTF-8이 아닌 바이트가 오면 replace로 넘긴다 — 판정에 쓰는 ASCII 부분(cat·cd·경로 구분자)은 보존된다.
+    """
     try:
-        data = json.load(sys.stdin)
+        raw = sys.stdin.buffer.read()
+        return json.loads(raw.decode("utf-8", errors="replace"))
     except Exception as e:
         # 훅이 입력을 못 읽었다고 도구를 막지 않는다. 조용히 통과시키되 이유를 남긴다.
         print(f"{hook_name}: 훅 입력을 읽지 못해 통과시킨다 ({e})", file=sys.stderr)
+        return None
+
+
+def read_command(hook_name: str) -> str | None:
+    """훅 입력에서 명령 문자열을 꺼낸다. 못 읽으면 None (= 막지 말고 통과)."""
+    data = read_input(hook_name)
+    if data is None:
         return None
     return (data.get("tool_input") or {}).get("command", "")
 

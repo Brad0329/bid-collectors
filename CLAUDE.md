@@ -53,7 +53,8 @@ Python 3.11 · httpx(async) · Pydantic v2 · lxml · BeautifulSoup4로 만든 �
 
 ## 작업 속도 규칙 ★실제로 샌 시간을 재고 정한다
 - **느리다고 느껴지면 테스트가 아니라 승인 대기부터 잰다**(실측: 테스트 30초 vs 대기 6분).
-  도구: `scripts/measure_wait.py`(벽시계 실측)·`measure_approvals.py`(원인 분류, 예측).
+  도구: `measure_approvals.py`(첫 절 `[실측]` = 승인 창 기록 훅이 적은 실제 창, 그 아래는 원인 분류 예측)·
+  `scripts/measure_wait.py`(벽시계).
   처방: `docs/playbooks/노하우_승인_대기_최소화.md`
 - **★ 검증 강도는 트랙이 아니라 "무엇을 바꿨나"로 정한다** (2026-09-05 템플릿 결정):
   문서·주석·문구(동작 불변) = diff 읽기, 코드 파일이면 정적 분석 1회, 테스트 0 /

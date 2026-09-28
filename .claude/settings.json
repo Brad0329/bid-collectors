@@ -55,6 +55,18 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/log_permission_request.py\"",
+            "timeout": 10,
+            "statusMessage": "승인 창 기록"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

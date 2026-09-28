@@ -20,6 +20,13 @@
 - **호출을 하나도 못 찾으면 '깨끗함'이 아니라 실패다**(exit 1). 초록색으로 보이면서
   아무것도 안 재는 상태를 만들지 않는다(silent failure 금지).
 
+## ★ 실측 기록이 있으면 그것이 먼저다 (2026-09-28)
+
+`.claude/hooks/log_permission_request.py`(PermissionRequest 훅)가 **승인 창이 실제로 뜬 호출**을
+`.claude/permission_requests.jsonl`에 적는다. 보고서 첫 절 `[실측]`이 그것을 세고, 아래의 예측·벽시계는
+어디를 볼지 고르는 보조로 내려간다. 기록이 0건이면 "안 물었다"와 "훅이 안 돌았다"를 가를 수 없으니
+그 사실을 그대로 찍는다(훅 등록 전 세션이거나 훅이 죽은 것 — 막히는 명령으로 확인).
+
 ## 결과는 예측이지 실측이 아니다
 
 여기 쓰는 접두사 매처는 실제 승인 엔진의 **근사치**다. 그래서 규칙을 넣은 뒤에는
@@ -35,7 +42,8 @@
 - **과대**: `git add`/`git commit -F`를 승인 필요로 셌지만 실제로는 1.6초 이하로 통과한다.
 - **과소**: 정작 **자기 자신을 부르는 명령**(인자가 붙은 형태)이 30초를 물고 있었는데 못 짚었다.
 → 규칙을 고친 뒤에는 **호출별 벽시계**(`scripts/measure_wait.py` — tool_use↔tool_result 간격)로
-  확인한다. 그것이 실측이고, 아래 수치는 어디를 볼지 고르는 데만 쓴다.
+  확인한다. 아래 수치는 어디를 볼지 고르는 데만 쓴다. (2026-09-28부터 실측의 1순위는 벽시계가 아니라
+  보고서 첫 절 `[실측]` — 승인 창 기록 훅이 적은 실제 창이다. 벽시계는 그 기록이 없을 때의 대안.)
 
 **★★ 파이프라인의 꼬리를 원인으로 지목하면 그것은 오진이다** (hanjadic 2026-08-20 실측).
 이 스크립트는 `|`·`;`로 조각내 조각마다 head를 세는데, **PowerShell 도구는 앞머리 하나로
@@ -196,6 +204,64 @@ def find_sessions(spec: str | None, count: int) -> list[Path]:
     if not files:
         raise SystemExit(f"세션 파일(.jsonl)이 없다: {d}")
     return with_subagents(files[:count])
+
+
+PERMISSION_LOG = ROOT / ".claude" / "permission_requests.jsonl"
+
+
+def load_permission_log(session_ids: set[str], path: Path = PERMISSION_LOG) -> list[dict] | None:
+    """승인 창 실측 기록 중 그 세션들 것(서브에이전트 포함 — session_id가 같다). 파일이 없으면 None."""
+    if not path.exists():
+        return None
+    out: list[dict] = []
+    bad = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            bad += 1  # 쓰이는 중 잘린 줄 — 건수를 알린다
+            continue
+        if rec.get("session_id") in session_ids:
+            out.append(rec)
+    if bad:
+        print(f"  (승인 창 기록에서 깨진 줄 {bad}개를 건너뛰었다)")
+    return out
+
+
+def permission_key(rec: dict) -> str:
+    """무엇이 물었나 — 셸이면 첫 조각의 앞머리, 아니면 도구 이름."""
+    tool = rec.get("tool_name") or "?"
+    if tool in ("Bash", "PowerShell"):
+        segs = split_segments(rec.get("target") or "")
+        return f"{tool}: {head_command(segs[0]) if segs else '?'}"
+    return tool
+
+
+def print_permission_log(records: list[dict] | None, top: int = 15) -> None:
+    """[실측] 절 — 승인 창이 실제로 뜬 호출. 잘랐으면 전체 건수와 함께 알린다."""
+    print("\n[실측] 승인 창이 실제로 뜬 호출 (PermissionRequest 훅 기록)")
+    if records is None:
+        print("  기록 파일이 없다 — 훅(log_permission_request)이 등록 안 됐거나 한 번도 안 돌았다.")
+        print("  아래 [규모]·[원인 분류]는 예측이다.")
+        return
+    if not records:
+        print("  이 세션들에 기록 0건 — 안 물었거나, 훅 등록 전 세션이거나, 훅이 죽었다(가를 수 없다).")
+        return
+    subs = sum(1 for r in records if r.get("agent_id"))
+    print(f"  {len(records)}건 (그중 서브에이전트 {subs}건)")
+    groups: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in records:
+        groups[permission_key(r)].append(r)
+    ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+    for key, rs in ranked[:top]:
+        sugg = collections.Counter(s for r in rs for s in r.get("suggestions") or [])
+        hint = f"   제안 규칙: {sugg.most_common(1)[0][0]}" if sugg else ""
+        print(f"  {len(rs):>4}회  {key}{hint}")
+        print(f"          e.g. {' '.join(str(rs[-1].get('target', '')).split())[:100]}")
+    if len(ranked) > top:
+        print(f"  … 나머지 {len(ranked) - top}종 {sum(len(v) for _, v in ranked[top:])}건 생략")
 
 
 def print_sessions(paths: list[Path]) -> None:
@@ -435,6 +501,8 @@ def main() -> int:
     calls = shell_calls(paths)
 
     print_sessions(paths)
+    print_permission_log(load_permission_log(
+        {p.stem for p in paths if p.parent.name != "subagents"}))
 
     if not calls:
         # 0건은 '깨끗함'이 아니다 — 파싱이 깨졌거나 엉뚱한 파일을 봤다는 뜻이다.
@@ -496,7 +564,7 @@ def main() -> int:
     print("  2. 규칙은 **즉시 걸린다**(2026-08-29 확정) — 그 자리에서 실제로 묻던 명령으로 재검증.")
     print("     판정은 settings.local.json에 **새로** 적혔는지로 한다.")
     print("  3. ★ 위 수치는 접두사 매처의 **예측**이고 양쪽으로 틀린 실사례가 있다(git 과대·자기 자신 과소).")
-    print("     실측은 scripts/measure_wait.py (tool_use↔tool_result 간격)로 확인해라.")
+    print("     실측은 위 [실측] 절(승인 창 기록)이다. 그 기록이 없으면 scripts/measure_wait.py(벽시계)로 확인해라.")
     return 0
 
 

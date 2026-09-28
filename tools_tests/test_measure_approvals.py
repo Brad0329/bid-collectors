@@ -27,7 +27,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from measure_approvals import (  # noqa: E402
     REDUNDANT_CD_COMMAND, REDUNDANT_CD_SEGMENT, REDUNDANT_GIT_C, ROOT, allowed, classify, find_sessions,
-    head_command, is_readonly, shell_calls, split_segments,
+    head_command, is_readonly, load_permission_log, print_permission_log, shell_calls,
+    split_segments,
 )
 
 REPO = str(ROOT).replace("\\", "/")   # 슬래시형 경로
@@ -203,6 +204,32 @@ def test_서브에이전트_기록까지_합쳐_센다(tmp_path, monkeypatch):
     assert [p.name for p in paths] == ["s1.jsonl", "agent-a.jsonl"]
     assert [c for _, c in shell_calls(paths)] == ["git status", "cat >> x <<EOF"]
     assert find_sessions("s1", 1) == paths               # 세션 ID로 골라도 같다
+
+
+# ── ⑦ 승인 창 실측 기록 ─────────────────────────────────────────────────────
+
+def test_실측_기록은_고른_세션_것만_읽는다(tmp_path):
+    log = tmp_path / "permission_requests.jsonl"
+    log.write_text("\n".join([
+        json.dumps({"session_id": "s1", "tool_name": "Bash", "target": "git fetch"}),
+        json.dumps({"session_id": "s1", "agent_id": "a", "tool_name": "Bash", "target": "cat > x"}),
+        json.dumps({"session_id": "other", "tool_name": "Bash", "target": "ls"}),
+        "{잘린 줄",
+    ]) + "\n", encoding="utf-8")
+    got = load_permission_log({"s1"}, log)
+    assert [r["target"] for r in got] == ["git fetch", "cat > x"]
+
+
+def test_기록_파일이_없으면_0건이_아니라_없음이다(tmp_path):
+    """★ '안 물었다(0건)'와 '훅이 안 돌았다(파일 없음)'를 섞으면 측정기가 조용히 거짓 초록불을 낸다."""
+    assert load_permission_log({"s1"}, tmp_path / "none.jsonl") is None
+
+
+def test_실측_보고는_잘랐으면_전체_건수를_알린다(capsys):
+    recs = [{"session_id": "s", "tool_name": f"Tool{i}", "target": "x"} for i in range(5)]
+    print_permission_log(recs, top=2)
+    out = capsys.readouterr().out
+    assert "5건" in out and "나머지 3종 3건 생략" in out   # CLAUDE.md '조용한 절단 금지'
 
 
 # ── ⑤ 규칙 매칭: 접두사 의미 ────────────────────────────────────────────────

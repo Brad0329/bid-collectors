@@ -42,5 +42,8 @@ htmlcov/
 # AI 커밋 메시지 파일 (고정 경로 — docs/playbooks/노하우_승인_대기_최소화.md 참조)
 .commit_msg.txt
 
+# 승인 창 기록 (.claude/hooks/log_permission_request.py — 측정기가 읽는다. 사용자 데이터)
+.claude/permission_requests.jsonl
+
 # 일회성 스크립트 (덮어써서 쓰고 지우지 않는다 — CLAUDE.md '작업 속도 규칙')
 scripts/_tmp/

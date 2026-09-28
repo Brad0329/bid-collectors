@@ -41,7 +41,11 @@ python scripts/measure_approvals.py
 
 ### 2. 원인을 갈라서 읽는다 — 여기가 이 스킬의 핵심이다
 
-**분류표의 상위 항목보다 `measure_wait.py`의 느린 순 상위를 먼저 본다** — 분류는 "자기 자신
+**★ 보고서 첫 절 `[실측]`을 가장 먼저 본다** — 승인 창 기록 훅(`log_permission_request`)이 적은 **실제로 뜬
+창**이다. 앞머리별 건수·서브에이전트 여부·Claude Code가 제안한 규칙이 나온다. 이 절이 있으면 처방은 여기서
+고르고, 아래 예측·벽시계는 확인용이다(노하우 `[H17]`). "기록 파일 없음/0건"이면 훅 등록부터 확인한다.
+
+**`[실측]`이 없을 때는 분류표의 상위 항목보다 `measure_wait.py`의 느린 순 상위를 먼저 본다** — 분류는 "자기 자신
 (호출 형태)"을 과소 계상한 실사례가 두 번 있다(hanjadic 2026-08-20·08-29: 분류가 "형태 5회"라
 할 때 실측 최대 원인이 전부 호출 형태였다).
 
@@ -79,7 +83,8 @@ python scripts/measure_approvals.py
 - 훅: 동봉 차단 훅은 **최대 5종**(`no_redundant_cd`(`cd` 복합·루트 `git -C` 읽기·쓰기 — 2026-09-27 `[H16]`)·`no_output_filter`·`no_inline_python`·
   `no_scratchpad_path` + 선택형 `no_targeted_flutter_test` — Flutter가 아니면 초기화 때 지운다.
   bid-collectors는 Flutter 자리에 `no_shell_file_write`(셸 `cat >`·`sed -i` 파일 쓰기, 2026-09-26)를 둔다).
-  `session_context`는 차단이 아니라 SessionStart 주입 훅이라 이 점검 대상이 아니다. **개수를 외우지 말고
+  `session_context`는 차단이 아니라 SessionStart 주입 훅이라 이 점검 대상이 아니다. `log_permission_request`
+  (PermissionRequest)는 측정용 기록 훅이다 — 막지 않으며, 이 점검의 재료를 만든다. **개수를 외우지 말고
   `.claude/hooks/`의 실제 파일과 settings.json 등록 항목을 대조한다.** 등록은 **matcher
   `Bash|PowerShell` 한 블록**에 모아 둔다 — **한쪽 셸에만 걸면 반대쪽으로 그대로
   통과한다**(2026-08-22 실측). 경로의 `$CLAUDE_PROJECT_DIR`는 **환경에 따라 비기도 채워지기도
@@ -117,7 +122,8 @@ git commit -F .commit_msg.txt
    같은 세션의 다음 보고서에서 사라짐). 실제로 묻던 명령으로 재검증하고, **판정은
    `settings.local.json`에 그 명령이 새로 적히는지로** 한다("한 번만 허용"은 안 남는다).
 2. **보고서의 수치는 예측이지 실측이 아니다** — 양쪽으로 틀린 실사례가 있다(과대·과소).
-   → **`scripts/measure_wait.py`로 벽시계를 재서 닫는다** (`--grep <명령>`으로 전후 비교).
+   → **다음 측정의 `[실측]` 절에서 그 명령이 사라졌는지로 닫는다**(승인 창 기록). 기록이 없는 환경이면
+   `scripts/measure_wait.py`로 벽시계를 재서 닫는다(`--grep <명령>`으로 전후 비교).
    확인이 이 세션에서 안 끝났으면 인계 메모(`work_log/plan.md`)에 남긴다.
 
 ## 관련 문서

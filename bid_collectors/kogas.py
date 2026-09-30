@@ -108,7 +108,7 @@ def _text(el) -> str:
     return " ".join(el.get_text(" ", strip=True).replace("\xa0", " ").split())
 
 
-def _parse_detail(html: str, code: str, bid_no: str) -> dict:
+def _parse_detail(html: str, code: str, bid_no: str) -> dict:  # noqa: C901
     """상세 HTML → fetch_detail 반환 dict. 항목 표는 `td.t_g`(항목명) 바로 다음 `td`(값) 쌍이다(2026-09-26 표본 26건)."""
     if NOT_FOUND_TEXT in html:
         raise ValueError(f"가스공사 상세 {bid_no}: 없는 공고(\"{NOT_FOUND_TEXT}\")")

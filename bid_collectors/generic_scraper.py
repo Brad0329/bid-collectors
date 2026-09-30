@@ -189,7 +189,7 @@ class GenericScraper(BaseCollector):
             kwargs["event_hooks"] = self.event_hooks
         return create_client(**kwargs)
 
-    async def _fetch(self, days: int = 30, **kwargs) -> tuple[list[Notice], int, list[str]]:
+    async def _fetch(self, days: int = 30, **kwargs) -> tuple[list[Notice], int, list[str]]:  # noqa: C901
         """설정된 사이트에서 공고 수집.
 
         Args:
@@ -346,7 +346,7 @@ class GenericScraper(BaseCollector):
 
         return self.config.list_url + pagination.replace("{page}", str(page))
 
-    def _parse_rows(self, html: str, cutoff: datetime) -> "_RowScan":
+    def _parse_rows(self, html: str, cutoff: datetime) -> "_RowScan":  # noqa: C901
         """HTML을 파싱하여 Notice 리스트와 행 집계를 반환한다(집계는 셀렉터 불일치 판정용)."""
         soup = BeautifulSoup(html, self.config.parser)
 

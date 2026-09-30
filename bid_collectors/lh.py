@@ -200,7 +200,7 @@ def _text(el) -> str:
     return " ".join(el.get_text(" ", strip=True).replace("\xa0", " ").split())
 
 
-def _parse_detail(html: str, bid_num: str, degree: str, bid_no: str) -> dict:
+def _parse_detail(html: str, bid_num: str, degree: str, bid_no: str) -> dict:  # noqa: C901
     """상세 HTML → fetch_detail 반환 dict. 표마다 `summary` 속성이 이름이다(2026-09-26 표본 23건, 업무 4종)."""
     soup = BeautifulSoup(_SELF_CLOSING_TR.sub(r"\1>", html), "lxml")
     detail: dict = {}

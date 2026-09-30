@@ -37,3 +37,11 @@ markers = [
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+
+[tool.ruff.lint]
+# 복잡도 규칙(CLAUDE.md '테스트 규칙'). 켤 때(2026-09-30) 기존 위반 6건은 함수 def 줄의 `# noqa: C901`로 목록화했다 —
+# 파일 단위 per-file-ignores는 그 파일의 새 함수까지 면제하므로 쓰지 않는다. 목록은 늘리지 않는다.
+extend-select = ["C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

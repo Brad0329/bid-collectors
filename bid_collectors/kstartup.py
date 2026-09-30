@@ -28,7 +28,7 @@ class KstartupCollector(BaseCollector):
 
     source_name = "K-Startup"
 
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:  # noqa: C901
         # 기본 True = 원칙 ②의 명시적 예외(2026-09-26 사용자): 등록일 필드가 없고, 서버 날짜 필터(cond[...::GTE])는
         # matchCount에만 먹고 데이터엔 안 먹는다(100건 중 98건 위반) — 진행중이 범위를 좁히는 유일한 조건(필터 없으면 30,168건)
         only_ongoing = kwargs.get("only_ongoing", True)

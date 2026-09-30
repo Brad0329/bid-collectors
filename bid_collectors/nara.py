@@ -272,7 +272,7 @@ class NaraCollector(BaseCollector):
 
     source_name = "나라장터"
 
-    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:
+    async def _fetch(self, days: int = 1, **kwargs) -> tuple[list[Notice], int, list[str]]:  # noqa: C901
         bid_types = kwargs.get("bid_types", list(BID_SERVICES.keys()))
         date_ranges = _split_date_range(days)
         notices: list[Notice] = []

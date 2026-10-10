@@ -190,7 +190,7 @@
   - 출처: ① 원칙 ② — REQUIREMENTS 공통 계약 원칙 ②·미결 질문(status) + bidwatch `docs/source_fields.md` 부록 A 남은 #2·#5·#6·#7·#8
     (**#6 공사 지역·#8 취소는 bidwatch가 이미 `extra` 원문으로 처리 중** — handover에 바뀐 값·조건을 적어 bidwatch 로직과 맞춘다, 2026-09-25 bidwatch 요청)
     ② bidwatch 요청서 `bidwatch/docs/requests/bid-collectors_d2b_detail_url.md`(2026-09-26 — 팝업 바로가기가 d2b 첫 화면으로 열림). 발급 2026-09-26 사용자(둘을 한 Phase로).
-  - 트랙: **일반**(BidWatch가 받는 표준 필드 값이 바뀐다 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(커밋 `e8472d7` v1.5.0 코드 — 태그는 v1.3.0까지).
+  - 트랙: **일반**(BidWatch가 받는 표준 필드 값이 바뀐다 — 계약 게이트). 검증: 전체 테스트 + BidWatch `backend/tests`(읽기·실행만) + 되돌리기(커밋 `e8472d7` v1.5.0 코드 = 태그 `v1.5.0` — 태그는 2026-10-09~10에 v1.2.0~v1.6.0 전 버전을 보충했다, 각 버전 줄이 바뀐 커밋).
     major가 섞이면 editable 설치라 커밋 즉시 bidwatch가 새 값을 받는다 → 구현은 브랜치, bidwatch 반영 시점에 main 병합(변경안 확정 때 결정).
   1. **조사(읽기만)** — bidwatch가 표준 필드를 어디서 읽고 무엇을 덮는지 영향표 · 이 패키지 전 수집기의 원칙 ② 위반 목록(Phase 009 기관 4종·알리오 포함) · d2b 상세 화면 주소 실측
   2. **변경안** — CONTRACT.md에 필드별 전후·버전 판정 + REQUIREMENTS 수용 기준 · 결정 필요 항목(status 처리 방식·기관 budget·region 원천 등)을 사용자에게
